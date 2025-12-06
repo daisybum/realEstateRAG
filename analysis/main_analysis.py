@@ -18,6 +18,13 @@ from prompt_manager import PromptManager
 from qwen_analyzer import QwenAnalyzer
 from config_loader import get_config
 
+# GraphRAG 연동 (선택적)
+try:
+    from graphrag import GraphIngester
+    GRAPHRAG_AVAILABLE = True
+except ImportError:
+    GRAPHRAG_AVAILABLE = False
+
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
@@ -58,11 +65,13 @@ class AnalysisPipeline:
     def __init__(self, 
                  analyzer: QwenAnalyzer, 
                  prompt_manager: PromptManager,
-                 output_dir: Path):
+                 output_dir: Path,
+                 graph_ingester: 'GraphIngester' = None):
         self.analyzer = analyzer
         self.pm = prompt_manager
         self.output_dir = output_dir
         self.output_dir.mkdir(exist_ok=True)
+        self.graph_ingester = graph_ingester
     
     def process(self, data: ReportData) -> Optional[dict]:
         """단일 보고서 분석
@@ -124,6 +133,15 @@ class AnalysisPipeline:
             }
             
             self._save_result(data.id, result)
+            
+            # Graph 적재 (활성화된 경우)
+            if self.graph_ingester:
+                try:
+                    stats = self.graph_ingester.ingest_analysis_result(result)
+                    logger.info(f"  - Graph: {stats['nodes_created']} nodes, {stats['relationships_created']} rels")
+                except Exception as ge:
+                    logger.warning(f"  - Graph ingestion failed: {ge}")
+            
             return result
             
         except Exception as e:
@@ -454,6 +472,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", type=str, default=system.model_name)
     parser.add_argument("--api_key", type=str, default=system.api_key)
     parser.add_argument("--max_samples", type=int, default=system.max_samples)
+    parser.add_argument("--enable-graph", action="store_true",
+                       help="Enable FalkorDB graph ingestion")
+    parser.add_argument("--falkordb-url", type=str, default="redis://localhost:6379",
+                       help="FalkorDB connection URL")
     
     return parser.parse_args()
 
@@ -474,10 +496,26 @@ def main():
         model_name=args.model,
     )
     
+    # GraphRAG 연동 (선택적)
+    graph_ingester = None
+    if args.enable_graph:
+        if GRAPHRAG_AVAILABLE:
+            try:
+                from falkordb import FalkorDB
+                db = FalkorDB.from_url(args.falkordb_url)
+                graph = db.select_graph("real_estate")
+                graph_ingester = GraphIngester(graph)
+                logger.info(f"GraphRAG enabled: {args.falkordb_url}")
+            except Exception as e:
+                logger.warning(f"Failed to connect to FalkorDB: {e}")
+        else:
+            logger.warning("GraphRAG not available (falkordb package not installed)")
+    
     pipeline = AnalysisPipeline(
         analyzer=analyzer,
         prompt_manager=prompt_manager,
         output_dir=Path(args.output_dir),
+        graph_ingester=graph_ingester,
     )
     
     # 보고서 목록 결정
