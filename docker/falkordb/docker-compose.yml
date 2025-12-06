@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: falkordb-gb10
+    ports:
+      - "6379:6379"   # Redis protocol (Bolt)
+      - "3000:3000"   # Browser UI
+    volumes:
+      - ./data:/data
+    environment:
+      # GB10 20-core ARM CPU 최적화
+      - FALKORDB_ARGS=THREAD_COUNT 16
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 4G
