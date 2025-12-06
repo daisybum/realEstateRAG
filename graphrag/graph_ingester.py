@@ -1,7 +1,8 @@
 """
-Graph Ingester
+Graph Ingester v2.0
 
-분석 결과 JSON을 FalkorDB 그래프에 적재하는 ETL 모듈
+분석 결과 JSON을 v2.0 온톨로지로 변환하여 FalkorDB에 적재
+추론 체인 구축 지원
 """
 
 import json
@@ -9,120 +10,179 @@ import logging
 import re
 from typing import Dict, Any, Optional, List
 from pathlib import Path
+from datetime import datetime
 
 from .graph_schema import (
-    WolbuOntology,
+    WolbuOntologyV2,
+    Report,
     Region,
     ApartmentComplex,
+    InvestmentAnalysis,
+    Indicator,
     GradeMetric,
     SupplyEvent,
     GradeCategory,
     GradeLevel,
-    CYPHER_TEMPLATES,
+    InvestmentVerdict,
+    IndicatorType,
+    CYPHER_TEMPLATES_V2,
 )
 
 logger = logging.getLogger(__name__)
 
 
-class GraphIngester:
-    """분석 결과 JSON → FalkorDB 그래프 적재"""
+class GraphIngesterV2:
+    """분석 결과 JSON → FalkorDB v2.0 그래프 적재"""
     
     def __init__(self, graph, auto_init_schema: bool = True):
-        """
-        Args:
-            graph: FalkorDB Graph 객체
-            auto_init_schema: 스키마 자동 초기화 여부
-        """
         self.graph = graph
-        self.ontology = WolbuOntology()
+        self.ontology = WolbuOntologyV2()
         
         if auto_init_schema:
             self._ensure_schema()
     
     def _ensure_schema(self):
-        """스키마(인덱스) 초기화"""
+        """스키마 초기화"""
         from .graph_schema import GraphSchemaManager
         manager = GraphSchemaManager(self.graph)
         manager.initialize_schema()
     
     def ingest_analysis_result(self, result: Dict[str, Any]) -> Dict[str, int]:
         """
-        분석 결과 JSON을 그래프에 적재
+        분석 결과 JSON을 v2.0 그래프에 적재
         
         Args:
-            result: main_analysis.py의 분석 결과
-                   {
-                       "report_id": "...",
-                       "facts": {...},  # 또는 문자열
-                       "verification": {...},
-                       "sentiment": {...},
-                       "insight": "..."
-                   }
+            result: {
+                "report_id": "...",
+                "input_quality": {...},
+                "facts": {...},
+                "verification": {...},
+                "sentiment": {...},
+                "insight": "..."
+            }
         
         Returns:
-            적재 통계 {nodes_created, relationships_created}
+            적재 통계
         """
-        stats = {"nodes_created": 0, "relationships_created": 0}
+        stats = {
+            "nodes_created": 0,
+            "relationships_created": 0,
+            "reports": 0,
+            "complexes": 0,
+            "analyses": 0,
+            "indicators": 0,
+        }
         
-        # facts 파싱 (문자열이면 JSON 파싱 시도)
+        # facts 파싱
         facts = self._parse_facts(result.get("facts", {}))
         if not facts:
             logger.warning(f"No facts to ingest for report {result.get('report_id')}")
             return stats
         
-        # 1. Region 노드 생성
-        region = self._create_region(facts)
-        if region:
+        # 1. Report 노드 생성 (NEW in v2.0)
+        report_id = result.get("report_id")
+        if report_id:
+            self._create_report_node(result)
             stats["nodes_created"] += 1
+            stats["reports"] += 1
         
-        # 2. ApartmentComplex 노드들 생성
-        complexes = self._create_complexes(facts, region)
-        stats["nodes_created"] += len(complexes)
-        stats["relationships_created"] += len(complexes)  # LOCATED_IN
+        # 2. Region 노드 생성 (간소화)
+        region_name = self._create_region(facts)
+        if region_name:
+            stats["nodes_created"] += 1
+            
+            # Report → Region 연결
+            if report_id:
+                self._link_report_to_region(report_id, region_name)
+                stats["relationships_created"] += 1
         
-        # 3. GradeMetric 노드들 생성
-        grades = self._create_grades(facts, region)
+        # 3. Indicator 노드들 생성 (NEW in v2.0)
+        indicators = self._create_indicators(facts, region_name)
+        stats["nodes_created"] += len(indicators)
+        stats["relationships_created"] += len(indicators)  # HAS_INDICATOR
+        stats["indicators"] += len(indicators)
+        
+        # 4. GradeMetric 노드들 생성 (변경 없음)
+        grades = self._create_grades(facts, region_name)
         stats["nodes_created"] += len(grades)
         stats["relationships_created"] += len(grades)  # HAS_GRADE
         
-        # 4. SupplyEvent 노드들 생성
-        supplies = self._create_supplies(facts, region)
-        stats["nodes_created"] += len(supplies)
-        stats["relationships_created"] += len(supplies)  # HAS_SUPPLY
+        # 5. ApartmentComplex 노드들 생성 (간소화)
+        complexes = self._create_complexes(facts, region_name, report_id)
+        stats["nodes_created"] += len(complexes)
+        stats["relationships_created"] += len(complexes)  # LOCATED_IN
+        stats["complexes"] += len(complexes)
         
-        logger.info(f"Ingested report {result.get('report_id')}: {stats}")
+        # 6. InvestmentAnalysis 노드들 생성 + 추론 체인 연결 (NEW in v2.0)
+        analyses = self._create_analyses(facts, region_name, grades)
+        stats["nodes_created"] += len(analyses)
+        stats["relationships_created"] += len(analyses)  # HAS_ANALYSIS
+        stats["analyses"] += len(analyses)
+        
+        # 추론 체인: Grade → Analysis (SUPPORTS)
+        stats["relationships_created"] += analyses * len(grades)  # 근사치
+        
+        # 7. SupplyEvent 노드들 생성 (선택적)
+        supplies = self._create_supplies(facts, region_name)
+        stats["nodes_created"] += len(supplies)
+        stats["relationships_created"] += len(supplies)
+        
+        logger.info(f"Ingested report {report_id}: {stats}")
         return stats
     
     def _parse_facts(self, facts: Any) -> Dict[str, Any]:
-        """facts 데이터 파싱 (문자열 또는 Dict)"""
+        """facts 데이터 파싱"""
         if isinstance(facts, dict):
             return facts
         
         if isinstance(facts, str):
-            # 청크 연결 형태인 경우 첫 번째 JSON 블록만 추출
             try:
-                # JSON 블록 찾기
                 json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', facts, re.DOTALL)
                 if json_match:
                     return json.loads(json_match.group())
             except json.JSONDecodeError:
                 pass
             
-            # 전체 문자열 파싱 시도
             try:
                 return json.loads(facts)
             except json.JSONDecodeError:
-                logger.error(f"Failed to parse facts string: {facts[:200]}...")
+                logger.error(f"Failed to parse facts string")
                 return {}
         
         return {}
     
+    def _create_report_node(self, result: Dict) -> Optional[str]:
+        """Report 노드 생성 (NEW in v2.0)"""
+        report_id = result.get("report_id")
+        if not report_id:
+            return None
+        
+        # input_quality에서 메타데이터 추출
+        input_quality = result.get("input_quality", {})
+        
+        report = Report(
+            report_id=report_id,
+            title=f"Report {report_id}",  # 실제로는 facts에서 추출 가능
+            analysis_date=datetime.now().isoformat(),
+            confidence_score=input_quality.get("confidence_score"),
+            data_sources=input_quality.get("data_sources", []),
+        )
+        
+        try:
+            self.graph.query(
+                CYPHER_TEMPLATES_V2["create_report"],
+                {"properties": report.to_cypher_properties()}
+            )
+            logger.debug(f"Created Report: {report_id}")
+            return report_id
+        except Exception as e:
+            logger.error(f"Failed to create Report: {e}")
+            return None
+    
     def _create_region(self, facts: Dict) -> Optional[str]:
-        """Region 노드 생성"""
-        # 지역명 추출 (여러 경로 시도)
+        """Region 노드 생성 (간소화 - 지표 제거)"""
         region_name = None
         
-        # district.name 또는 location.district
         if "district" in facts:
             district = facts["district"]
             if isinstance(district, dict):
@@ -139,30 +199,15 @@ class GraphIngester:
             region_name = facts["region"]
         
         if not region_name:
-            logger.warning("Could not extract region name from facts")
+            logger.warning("Could not extract region name")
             return None
         
-        # 속성 수집
+        # 간단한 속성만 저장 (population 등은 Indicator로 이동)
         props = {"name": region_name}
         
-        # 인구/수요 정보
-        if "district" in facts and isinstance(facts["district"], dict):
-            district = facts["district"]
-            if "population" in district:
-                props["population"] = district["population"]
-            if "appropriate_demand" in district:
-                props["appropriate_demand"] = district["appropriate_demand"]
-        
-        # 공급 리스크 상태
-        if "supply" in facts and isinstance(facts["supply"], dict):
-            supply = facts["supply"]
-            if "risk_status" in supply:
-                props["supply_risk_status"] = supply["risk_status"]
-        
-        # MERGE 쿼리 실행
         try:
             self.graph.query(
-                CYPHER_TEMPLATES["merge_region"],
+                CYPHER_TEMPLATES_V2["merge_region"],
                 {"name": region_name, "properties": props}
             )
             logger.debug(f"Created/updated Region: {region_name}")
@@ -171,67 +216,81 @@ class GraphIngester:
             logger.error(f"Failed to create Region: {e}")
             return None
     
-    def _create_complexes(self, facts: Dict, region_name: Optional[str]) -> List[str]:
-        """ApartmentComplex 노드들 생성"""
+    def _create_indicators(self, facts: Dict, region_name: Optional[str]) -> List[str]:
+        """Indicator 노드들 생성 (NEW in v2.0)"""
         created = []
         
-        complexes = facts.get("complexes", []) or facts.get("properties", [])
-        if not isinstance(complexes, list):
+        if not region_name:
             return created
         
-        for complex_data in complexes:
-            if not isinstance(complex_data, dict):
-                continue
+        indicators_data = []
+        
+        # district에서 지표 추출
+        if "district" in facts and isinstance(facts["district"], dict):
+            district = facts["district"]
             
-            name = complex_data.get("name") or complex_data.get("complex_name")
-            if not name:
-                continue
-            
-            # 속성 수집
-            props = {"name": name}
-            
-            # 가격 정보
-            for key in ["sales_price", "jeonse_price", "gap_price"]:
-                if key in complex_data:
-                    props[key] = complex_data[key]
-            
-            # 전세가율
-            if "jeonse_rate" in complex_data:
-                props["jeonse_rate"] = complex_data["jeonse_rate"]
-            
-            # 저평가 여부
-            if "is_undervalued" in complex_data:
-                props["is_undervalued"] = complex_data["is_undervalued"]
-            elif "undervalued" in complex_data:
-                props["is_undervalued"] = complex_data["undervalued"]
-            
-            # 투자 코멘트
-            if "investment_comment" in complex_data:
-                props["investment_comment"] = complex_data["investment_comment"][:500]  # 길이 제한
-            
-            try:
-                # 단지 노드 생성
-                self.graph.query(
-                    CYPHER_TEMPLATES["merge_complex"],
-                    {"name": name, "properties": props}
-                )
-                
-                # 지역과 연결
-                if region_name:
-                    self.graph.query(
-                        CYPHER_TEMPLATES["link_complex_to_region"],
-                        {"complex_name": name, "region_name": region_name}
+            if "population" in district:
+                indicators_data.append(
+                    Indicator(
+                        type=IndicatorType.POPULATION.value,
+                        value=district["population"],
+                        unit="명"
                     )
-                
-                created.append(name)
-                logger.debug(f"Created Complex: {name}")
+                )
+            
+            if "appropriate_demand" in district:
+                indicators_data.append(
+                    Indicator(
+                        type=IndicatorType.APPROPRIATE_DEMAND.value,
+                        value=district["appropriate_demand"],
+                        unit="세대"
+                    )
+                )
+        
+        # supply에서 지표 추출
+        if "supply" in facts and isinstance(facts["supply"], dict):
+            supply = facts["supply"]
+            
+            # 3년간 공급물량
+            supply_3yr = 0
+            yearly = supply.get("yearly_volume", {}) or supply.get("by_year", {})
+            if isinstance(yearly, dict):
+                for year_str, volume in yearly.items():
+                    try:
+                        year = int(year_str)
+                        if 2024 <= year <= 2026:  # 최근 3년
+                            supply_3yr += int(volume) if volume else 0
+                    except (ValueError, TypeError):
+                        continue
+            
+            if supply_3yr > 0:
+                indicators_data.append(
+                    Indicator(
+                        type=IndicatorType.SUPPLY_VOLUME_3YR.value,
+                        value=supply_3yr,
+                        unit="세대"
+                    )
+                )
+        
+        # Indicator 노드 생성 및 Region 연결
+        for indicator in indicators_data:
+            try:
+                self.graph.query(
+                    CYPHER_TEMPLATES_V2["create_indicator"],
+                    {
+                        "region_name": region_name,
+                        "properties": indicator.to_cypher_properties()
+                    }
+                )
+                created.append(f"{indicator.type}:{indicator.value}")
+                logger.debug(f"Created Indicator: {indicator.type}={indicator.value}")
             except Exception as e:
-                logger.error(f"Failed to create Complex {name}: {e}")
+                logger.error(f"Failed to create Indicator: {e}")
         
         return created
     
     def _create_grades(self, facts: Dict, region_name: Optional[str]) -> List[str]:
-        """GradeMetric 노드들 생성"""
+        """GradeMetric 노드들 생성 (변경 없음)"""
         created = []
         
         if not region_name:
@@ -241,7 +300,6 @@ class GraphIngester:
         if not isinstance(grades, dict):
             return created
         
-        # 카테고리 매핑
         category_map = {
             "jobs": GradeCategory.JOBS,
             "직장": GradeCategory.JOBS,
@@ -269,7 +327,6 @@ class GraphIngester:
             else:
                 continue
             
-            # 등급 레벨 변환
             try:
                 grade = GradeLevel(grade_str.upper())
             except ValueError:
@@ -279,16 +336,20 @@ class GraphIngester:
                 "category": category.value,
                 "grade": grade.value,
             }
-            if raw_value:
+            if raw_value is not None:
                 props["raw_value"] = str(raw_value)
             if evidence:
                 props["evidence_text"] = evidence[:500]
             
             try:
-                self.graph.query(
-                    CYPHER_TEMPLATES["create_grade"],
-                    {"region_name": region_name, "properties": props}
-                )
+                # GradeMetric 생성 쿼리 (Region 연결)
+                query = f"""
+                MATCH (r:Region {{name: '{region_name}'}})
+                CREATE (g:GradeMetric $properties)
+                CREATE (r)-[:HAS_GRADE]->(g)
+                RETURN g
+                """
+                self.graph.query(query, {"properties": props})
                 created.append(f"{category.value}:{grade.value}")
                 logger.debug(f"Created Grade: {category.value}={grade.value}")
             except Exception as e:
@@ -296,8 +357,137 @@ class GraphIngester:
         
         return created
     
+    def _create_complexes(self, facts: Dict, region_name: Optional[str], report_id: Optional[str]) -> List[str]:
+        """ApartmentComplex 노드들 생성 (간소화)"""
+        created = []
+        
+        complexes = facts.get("complexes", []) or facts.get("properties", [])
+        if not isinstance(complexes, list):
+            return created
+        
+        for complex_data in complexes:
+            if not isinstance(complex_data, dict):
+                continue
+            
+            name = complex_data.get("name") or complex_data.get("complex_name")
+            if not name:
+                continue
+            
+            # 가격 정보만 저장 (is_undervalued, investment_comment 제거)
+            props = {"name": name}
+            
+            for key in ["sales_price", "jeonse_price", "gap_price"]:
+                if key in complex_data:
+                    props[key] = complex_data[key]
+            
+            if "jeonse_rate" in complex_data:
+                props["jeonse_rate"] = complex_data["jeonse_rate"]
+            
+            try:
+                # Complex 노드 생성
+                self.graph.query(
+                    CYPHER_TEMPLATES_V2["merge_complex"],
+                    {"name": name, "properties": props}
+                )
+                
+                # Region 연결
+                if region_name:
+                    query = f"""
+                    MATCH (c:ApartmentComplex {{name: '{name}'}})
+                    MATCH (r:Region {{name: '{region_name}'}})
+                    MERGE (c)-[:LOCATED_IN]->(r)
+                    """
+                    self.graph.query(query)
+                
+                # Report 연결 (NEW)
+                if report_id:
+                    query = f"""
+                    MATCH (c:ApartmentComplex {{name: '{name}'}})
+                    MATCH (rep:Report {{report_id: '{report_id}'}})
+                    MERGE (rep)-[:MENTIONS]->(c)
+                    """
+                    self.graph.query(query)
+                
+                created.append(name)
+                logger.debug(f"Created Complex: {name}")
+            except Exception as e:
+                logger.error(f"Failed to create Complex {name}: {e}")
+        
+        return created
+    
+    def _create_analyses(self, facts: Dict, region_name: Optional[str], grades: List[str]) -> int:
+        """InvestmentAnalysis 노드들 생성 + 추론 체인 연결 (NEW in v2.0)"""
+        created_count = 0
+        
+        complexes = facts.get("complexes", []) or facts.get("properties", [])
+        if not isinstance(complexes, list):
+            return created_count
+        
+        for complex_data in complexes:
+            if not isinstance(complex_data, dict):
+                continue
+            
+            name = complex_data.get("name") or complex_data.get("complex_name")
+            if not name:
+                continue
+            
+            # is_undervalued, investment_comment 추출
+            is_undervalued = complex_data.get("is_undervalued") or complex_data.get("undervalued")
+            comment = complex_data.get("investment_comment", "")
+            
+            # Verdict 결정
+            if is_undervalued:
+                verdict = InvestmentVerdict.UNDERVALUED
+            else:
+                verdict = InvestmentVerdict.FAIR
+            
+            # 추론 체인 생성 (간단한 버전)
+            reasoning = f"전세가율: {complex_data.get('jeonse_rate', 0):.2f}%"
+            if is_undervalued:
+                reasoning += ", 저평가 구간"
+            
+            analysis = InvestmentAnalysis(
+                verdict=verdict,
+                reasoning=reasoning,
+                confidence=0.7,  # 기본값
+                investment_comment=comment[:500] if comment else None,
+                analysis_date=datetime.now().isoformat(),
+            )
+            
+            try:
+                # InvestmentAnalysis 생성 + Complex 연결
+                self.graph.query(
+                    CYPHER_TEMPLATES_V2["create_analysis"],
+                    {
+                        "complex_name": name,
+                        "properties": analysis.to_cypher_properties()
+                    }
+                )
+                
+                # 추론 체인: Grade → Analysis (SUPPORTS)
+                # 모든 S/A 등급을 Analysis에 연결
+                for grade_str in grades:
+                    if ":S" in grade_str or ":A" in grade_str:
+                        category, level = grade_str.split(":")
+                        query = f"""
+                        MATCH (c:ApartmentComplex {{name: '{name}'}})-[:HAS_ANALYSIS]->(a:InvestmentAnalysis)
+                        MATCH (c)-[:LOCATED_IN]->(r:Region)-[:HAS_GRADE]->(g:GradeMetric {{category: '{category}', grade: '{level}'}})
+                        MERGE (g)-[:SUPPORTS]->(a)
+                        """
+                        try:
+                            self.graph.query(query)
+                        except:
+                            pass  # 이미 존재하는 관계 무시
+                
+                created_count += 1
+                logger.debug(f"Created InvestmentAnalysis for: {name}")
+            except Exception as e:
+                logger.error(f"Failed to create Analysis for {name}: {e}")
+        
+        return created_count
+    
     def _create_supplies(self, facts: Dict, region_name: Optional[str]) -> List[str]:
-        """SupplyEvent 노드들 생성"""
+        """SupplyEvent 노드들 생성 (선택적)"""
         created = []
         
         if not region_name:
@@ -307,7 +497,6 @@ class GraphIngester:
         if not isinstance(supply, dict):
             return created
         
-        # 연도별 공급물량
         yearly = supply.get("yearly_volume", {}) or supply.get("by_year", {})
         if isinstance(yearly, dict):
             for year_str, volume in yearly.items():
@@ -320,10 +509,13 @@ class GraphIngester:
                 props = {"year": year, "volume": vol}
                 
                 try:
-                    self.graph.query(
-                        CYPHER_TEMPLATES["create_supply"],
-                        {"region_name": region_name, "properties": props}
-                    )
+                    query = f"""
+                    MATCH (r:Region {{name: '{region_name}'}})
+                    CREATE (s:SupplyEvent $properties)
+                    CREATE (r)-[:HAS_SUPPLY]->(s)
+                    RETURN s
+                    """
+                    self.graph.query(query, {"properties": props})
                     created.append(f"{year}:{vol}")
                     logger.debug(f"Created Supply: {year}={vol}")
                 except Exception as e:
@@ -331,14 +523,26 @@ class GraphIngester:
         
         return created
     
+    def _link_report_to_region(self, report_id: str, region_name: str):
+        """Report → Region 연결 (NEW)"""
+        try:
+            query = f"""
+            MATCH (rep:Report {{report_id: '{report_id}'}})
+            MATCH (r:Region {{name: '{region_name}'}})
+            MERGE (rep)-[:ANALYZES]->(r)
+            """
+            self.graph.query(query)
+        except Exception as e:
+            logger.error(f"Failed to link Report to Region: {e}")
+    
     def ingest_from_file(self, filepath: Path) -> Dict[str, int]:
-        """분석 결과 JSON 파일에서 적재"""
+        """파일에서 적재"""
         with open(filepath, 'r', encoding='utf-8') as f:
             result = json.load(f)
         return self.ingest_analysis_result(result)
     
     def batch_ingest(self, results_dir: Path, limit: Optional[int] = None) -> Dict[str, Any]:
-        """디렉토리 내 모든 JSON 파일 일괄 적재"""
+        """일괄 적재"""
         results_dir = Path(results_dir)
         files = list(results_dir.glob("*_analysis.json"))
         
@@ -350,6 +554,8 @@ class GraphIngester:
             "files_failed": 0,
             "total_nodes": 0,
             "total_relationships": 0,
+            "total_reports": 0,
+            "total_analyses": 0,
         }
         
         for filepath in files:
@@ -358,6 +564,8 @@ class GraphIngester:
                 total_stats["files_processed"] += 1
                 total_stats["total_nodes"] += stats["nodes_created"]
                 total_stats["total_relationships"] += stats["relationships_created"]
+                total_stats["total_reports"] += stats.get("reports", 0)
+                total_stats["total_analyses"] += stats.get("analyses", 0)
             except Exception as e:
                 logger.error(f"Failed to ingest {filepath}: {e}")
                 total_stats["files_failed"] += 1
@@ -366,41 +574,14 @@ class GraphIngester:
         return total_stats
 
 
+# Backward compatibility alias
+GraphIngester = GraphIngesterV2
+
+
 if __name__ == "__main__":
-    # 테스트 (실제 FalkorDB 연결 없이)
-    print("=== Graph Ingester Test ===")
-    
-    # 샘플 분석 결과
-    sample_result = {
-        "report_id": "test_001",
-        "facts": {
-            "district": {
-                "name": "부산진구",
-                "population": 44035,
-                "appropriate_demand": 220
-            },
-            "grades": {
-                "jobs": {"grade": "A", "raw_value": 176113},
-                "transport": {"grade": "S", "evidence": "서면역 도보 10분"},
-                "school": {"grade": "B"},
-                "environment": {"grade": "A"}
-            },
-            "complexes": [
-                {
-                    "name": "가야롯데캐슬골드아너",
-                    "jeonse_rate": 64.52,
-                    "is_undervalued": True,
-                    "investment_comment": "교통 호재로 인해 향후 상승 가능성 높음"
-                }
-            ],
-            "supply": {
-                "yearly_volume": {
-                    "2024": 1500,
-                    "2025": 2000,
-                    "2026": 656
-                }
-            }
-        }
-    }
-    
-    print(f"Sample result: {json.dumps(sample_result, indent=2, ensure_ascii=False)}")
+    print("=== Graph Ingester v2.0 ===")
+    print("New features:")
+    print("- Report node creation")
+    print("- InvestmentAnalysis separation")
+    print("- Indicator nodes")
+    print("- Reasoning chain (Grade → Analysis)")
