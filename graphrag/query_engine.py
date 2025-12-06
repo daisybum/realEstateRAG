@@ -207,8 +207,8 @@ class HybridRAGEngine:
             if rate_match:
                 jeonse_rate = float(rate_match.group(1))
             
-            return CYPHER_TEMPLATES["find_undervalued"].replace(
-                "$min_jeonse_rate", str(jeonse_rate)
+            return CYPHER_TEMPLATES_V2["find_undervalued_v2"].format(
+                min_jeonse_rate=jeonse_rate
             )
         
         # 특정 등급 조회
@@ -222,9 +222,10 @@ class HybridRAGEngine:
                             "학군": "School",
                             "환경": "Environment"
                         }
-                        return CYPHER_TEMPLATES["find_by_grade"].replace(
-                            "$category", f"'{cat_map[category]}'"
-                        ).replace("$grade", f"'{grade}'")
+                        return CYPHER_TEMPLATES_V2["find_by_grade_v2"].format(
+                            category=cat_map[category],
+                            grade=grade
+                        )
         
         return None
     

@@ -339,62 +339,62 @@ class GraphSchemaManager:
 CYPHER_TEMPLATES_V2 = {
     # Report 생성
     "create_report": """
-        CREATE (r:Report $properties)
+        CREATE (r:Report {props_str})
         RETURN r
     """,
     
     # Region 생성 (간소화)
     "merge_region": """
-        MERGE (r:Region {name: $name})
-        SET r += $properties
+        MERGE (r:Region {{name: '{name}'}})
+        SET r += {props_str}
         RETURN r
     """,
     
     # Complex 생성 (간소화)
     "merge_complex": """
-        MERGE (c:ApartmentComplex {name: $name})
-        SET c += $properties
+        MERGE (c:ApartmentComplex {{name: '{name}'}})
+        SET c += {props_str}
         RETURN c
     """,
     
     # InvestmentAnalysis 생성 + Complex 연결
     "create_analysis": """
-        MATCH (c:ApartmentComplex {name: $complex_name})
-        CREATE (a:InvestmentAnalysis $properties)
+        MATCH (c:ApartmentComplex {{name: '{complex_name}'}})
+        CREATE (a:InvestmentAnalysis {props_str})
         CREATE (c)-[:HAS_ANALYSIS]->(a)
         RETURN a
     """,
     
     # Indicator 생성 + Region 연결
     "create_indicator": """
-        MATCH (r:Region {name: $region_name})
-        CREATE (i:Indicator $properties)
+        MATCH (r:Region {{name: '{region_name}'}})
+        CREATE (i:Indicator {props_str})
         CREATE (r)-[:HAS_INDICATOR]->(i)
         RETURN i
     """,
     
     # 추론 체인 연결: Grade → Analysis
     "link_grade_to_analysis": """
-        MATCH (g:GradeMetric {category: $category, grade: $grade})
+        MATCH (g:GradeMetric {{category: '{category}', grade: '{grade}'}})
         MATCH (a:InvestmentAnalysis)
-        WHERE id(a) = $analysis_id
+        WHERE id(a) = {analysis_id}
         CREATE (g)-[:SUPPORTS]->(a)
     """,
     
     # 추론 체인 조회
     "get_reasoning_chain": """
-        MATCH path = (c:ApartmentComplex {name: $complex_name})
+        MATCH path = (c:ApartmentComplex {{name: '{complex_name}'}})
                      -[:HAS_ANALYSIS]->(a:InvestmentAnalysis)
                      <-[:SUPPORTS]-(g:GradeMetric)
         RETURN c.name, a.verdict, a.reasoning, 
-               collect({category: g.category, grade: g.grade}) as supporting_grades
+               collect({{category: g.category, grade: g.grade}}) as supporting_grades
     """,
     
     # 저평가 단지 조회 (v2.0)
     "find_undervalued_v2": """
-        MATCH (c:ApartmentComplex)-[:HAS_ANALYSIS]->(a:InvestmentAnalysis {verdict: 'Undervalued'})
+        MATCH (c:ApartmentComplex)-[:HAS_ANALYSIS]->(a:InvestmentAnalysis {{verdict: 'Undervalued'}})
         MATCH (c)-[:LOCATED_IN]->(r:Region)
-        WHERE c.jeonse_rate >= $min_jeonse_rate
+        WHERE c.jeonse_rate >= {min_jeonse_rate}
         RETURN c.name, c.jeonse_rate, c.gap_price, r.name as region, a.reasoning
         ORDER BY c.jeonse_rate DESC
         LIMIT 20
@@ -403,18 +403,17 @@ CYPHER_TEMPLATES_V2 = {
     # 등급별 투자 단지 (v2.0)
     "find_by_grade_v2": """
         MATCH (c:ApartmentComplex)-[:HAS_ANALYSIS]->(a:InvestmentAnalysis)
-        MATCH (c)-[:LOCATED_IN]->(r:Region)-[:HAS_GRADE]->(g:GradeMetric)
-        WHERE g.category = $category AND g.grade = $grade
-          AND a.verdict IN ['Undervalued', 'Fair']
+        MATCH (c)-[:LOCATED_IN]->(r:Region)-[:HAS_GRADE]->(g:GradeMetric {{category: '{category}', grade: '{grade}'}})
+        WHERE a.verdict IN ['Undervalued', 'Fair']
         RETURN c.name, c.jeonse_rate, r.name as region, g.grade, a.reasoning
         LIMIT 20
     """,
     
     # 지표 기반 공급 리스크 분석
     "find_supply_risk_v2": """
-        MATCH (r:Region)-[:HAS_INDICATOR]->(i1:Indicator {type: 'supply_volume_3yr'})
-        MATCH (r)-[:HAS_INDICATOR]->(i2:Indicator {type: 'appropriate_demand'})
-        WHERE toFloat(i1.value) > toFloat(i2.value) * $risk_multiplier
+        MATCH (r:Region)-[:HAS_INDICATOR]->(i1:Indicator {{type: 'supply_volume_3yr'}})
+        MATCH (r)-[:HAS_INDICATOR]->(i2:Indicator {{type: 'appropriate_demand'}})
+        WHERE toFloat(i1.value) > toFloat(i2.value) * {risk_multiplier}
         RETURN r.name, i1.value as supply, i2.value as demand,
                toFloat(i1.value) / toFloat(i2.value) as risk_ratio
         ORDER BY risk_ratio DESC

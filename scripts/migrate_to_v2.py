@@ -53,6 +53,21 @@ class SchemaM igrator:
             "reports_created": 0,
         }
     
+    def _format_props(self, props: Dict[str, Any]) -> str:
+        """딕셔너리를 Cypher 속성 문자열로 변환"""
+        parts = []
+        for k, v in props.items():
+            if isinstance(v, str):
+                safe_v = v.replace("'", "\\'")  # 이스케이프
+                parts.append(f"{k}: '{safe_v}'")
+            elif isinstance(v, bool):
+                parts.append(f"{k}: {str(v).lower()}")
+            elif v is None:
+                continue
+            else:
+                parts.append(f"{k}: {v}")
+        return "{" + ", ".join(parts) + "}"
+    
     def migrate(self):
         """전체 마이그레이션 실행"""
         logger.info("Starting v1.0 → v2.0 migration...")
@@ -143,15 +158,15 @@ class SchemaM igrator:
             unit=unit
         )
         
-        query = f"""
-        MATCH (r:Region {{name: '{region_name}'}})
-        CREATE (i:Indicator $properties)
-        CREATE (r)-[:HAS_INDICATOR]->(i)
-        RETURN i
-        """
-        
         try:
-            self.graph.query(query, {"properties": indicator.to_cypher_properties()})
+            props_str = self._format_props(indicator.to_cypher_properties())
+            query = f"""
+            MATCH (r:Region {{name: '{region_name}'}})
+            CREATE (i:Indicator {props_str})
+            CREATE (r)-[:HAS_INDICATOR]->(i)
+            RETURN i
+            """
+            self.graph.query(query)
             self.stats["indicators_created"] += 1
             logger.debug(f"  Created Indicator: {indicator_type}")
         except Exception as e:
@@ -225,15 +240,15 @@ class SchemaM igrator:
             analysis_date=datetime.now().isoformat(),
         )
         
-        query = f"""
-        MATCH (c:ApartmentComplex {{name: '{complex_name}'}})
-        CREATE (a:InvestmentAnalysis $properties)
-        CREATE (c)-[:HAS_ANALYSIS]->(a)
-        RETURN a
-        """
-        
         try:
-            self.graph.query(query, {"properties": analysis.to_cypher_properties()})
+            props_str = self._format_props(analysis.to_cypher_properties())
+            query = f"""
+            MATCH (c:ApartmentComplex {{name: '{complex_name}'}})
+            CREATE (a:InvestmentAnalysis {props_str})
+            CREATE (c)-[:HAS_ANALYSIS]->(a)
+            RETURN a
+            """
+            self.graph.query(query)
             
             # 추론 체인: Grade → Analysis (S/A 등급만)
             grade_query = f"""
@@ -288,22 +303,16 @@ class SchemaM igrator:
             )
             
             # Report 생성 + Region 연결
-            create_query = """
-            CREATE (rep:Report $properties)
-            WITH rep
-            MATCH (r:Region {name: $region_name})
-            CREATE (rep)-[:ANALYZES]->(r)
-            RETURN rep
-            """
-            
             try:
-                self.graph.query(
-                    create_query,
-                    {
-                        "properties": report.to_cypher_properties(),
-                        "region_name": region_name
-                    }
-                )
+                props_str = self._format_props(report.to_cypher_properties())
+                create_query = f"""
+                CREATE (rep:Report {props_str})
+                WITH rep
+                MATCH (r:Region {{name: '{region_name}'}})
+                CREATE (rep)-[:ANALYZES]->(r)
+                RETURN rep
+                """
+                self.graph.query(create_query)
                 
                 # Report → Complex (MENTIONS) 연결
                 mentions_query = f"""
