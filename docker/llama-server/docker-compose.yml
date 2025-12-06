@@ -10,7 +10,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: llama-server:qwen3-vl-30b-q4km
+    image: llama-server:qwen3-vl-30b-arm64
     container_name: llama-qwen3-vl-30b
 
     # GPU Configuration
@@ -42,7 +42,7 @@ services:
     ipc: host
 
     command: >
-      --model /models/${MODEL_FILENAME:-Qwen3-VL-30B-A3B-Instruct-UD-Q8_K_XL.gguf} --mmproj /models/${MMPROJ_FILENAME:-mmproj-Qwen3-VL-30B-A3B-Instruct-f16.gguf} --host 0.0.0.0 --port 8000 --ctx-size ${CTX_SIZE:-32768} --n-gpu-layers ${N_GPU_LAYERS:--1} --flash-attn --threads ${THREADS:-8} --media-path /workspace
+      --model /models/${MODEL_FILENAME:-Qwen3-VL-30B-A3B-Instruct-UD-Q8_K_XL.gguf} --mmproj /models/${MMPROJ_FILENAME:-mmproj-F16.gguf} --host 0.0.0.0 --port 8000 --ctx-size ${CTX_SIZE:-32768} --n-gpu-layers ${N_GPU_LAYERS:--1} --flash-attn on --threads ${THREADS:-8}
 
     restart: unless-stopped
 

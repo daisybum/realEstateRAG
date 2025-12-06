@@ -451,12 +451,25 @@ class QwenAnalyzer:
         content = [{"type": "text", "text": text}]
         
         for img_path in images:
-            content.append({
-                "type": "image_url",
-                "image_url": {"url": f"file://{img_path}"}
-            })
+            # 로컬 파일인 경우 base64로 인코딩하여 전송 (컨테이너/호스트 경로 문제 해결)
+            try:
+                base64_image = self._encode_image(img_path)
+                image_url = f"data:image/jpeg;base64,{base64_image}"
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": image_url}
+                })
+            except Exception as e:
+                logger.warning(f"Failed to load image {img_path}: {e}")
         
         return content
+
+    def _encode_image(self, image_path: str) -> str:
+        """이미지 파일을 base64 문자열로 인코딩"""
+        import base64
+        
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
 
 
 if __name__ == "__main__":

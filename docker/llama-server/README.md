@@ -76,8 +76,8 @@ docker/llama-server/
 ├── .env.example
 ├── README.md
 └── models/           # 모델 파일 (gitignore)
-    ├── Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf
-    └── mmproj-Qwen3-VL-30B-A3B-Instruct-f16.gguf
+    ├── Qwen3-VL-30B-A3B-Instruct-UD-Q8_K_XL.gguf
+    └── mmproj-F16.gguf
 ```
 
 ## 환경변수

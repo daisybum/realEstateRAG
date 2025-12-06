@@ -63,3 +63,7 @@ Thumbs.db
 
 # OUTPUT/RESULT
 analysis_results/
+
+# Test Data
+test_data/
+test_output/
