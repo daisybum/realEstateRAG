@@ -1,7 +1,7 @@
 """
 Qwen VL Analyzer
 
-vLLM 서버 기반 Qwen Vision-Language 모델 분석기
+OpenAI 호환 서버 기반 Qwen Vision-Language 모델 분석기
 청크 기반 대용량 이미지 처리 지원
 """
 import json
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class QwenAnalyzer:
-    """vLLM 기반 Qwen VL 분석기
+    """OpenAI 호환 서버 기반 Qwen VL 분석기
     
     OpenAI 호환 API를 사용하여 멀티모달 분석 수행
     대용량 이미지는 청크 단위로 분할 처리 후 결과 병합
@@ -39,8 +39,8 @@ class QwenAnalyzer:
                  max_images_per_chunk: int = MAX_IMAGES_PER_CHUNK):
         """
         Args:
-            api_key: vLLM 서버 API 키 (기본: EMPTY)
-            base_url: vLLM 서버 URL
+            api_key: OpenAI 호환 서버 API 키 (기본: EMPTY)
+            base_url: OpenAI 호환 서버 URL
             model_name: 모델명 (None이면 환경변수 또는 기본값 사용)
             temperature: 생성 온도 (낮을수록 결정적)
             max_tokens: 최대 출력 토큰
