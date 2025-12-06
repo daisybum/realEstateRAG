@@ -1,0 +1,135 @@
+_type: chat
+name: insight_generation
+version: "2.0.0"
+description: "온톨로지 기반 종합 투자 인사이트 생성"
+tags: ["prod", "core", "ontology", "final"]
+
+input_variables:
+  - region_name
+  - fact_data
+  - verification_result
+  - risk_analysis
+
+messages:
+  - role: system
+    content_ref: base_system.yaml
+    
+  - role: user
+    content: |
+      # Task: Comprehensive Investment Insight Generation
+      
+      Synthesize all prior analysis stages to produce a Wolbu-style investment report with ontology-backed reasoning.
+      
+      ## Input Data
+      - **Region**: {region_name}
+      - **Extracted Facts (JSON)**: 
+      ```
+      {fact_data}
+      ```
+      - **Visual Verification**:
+      ```
+      {verification_result}
+      ```
+      - **Sentiment Analysis**:
+      ```
+      {risk_analysis}
+      ```
+      
+      ## Report Generation Guidelines
+      
+      ### Ontology-Backed Reasoning
+      - Reference specific grades (S/A/B/C) from fact extraction
+      - Cite calculated metrics (jeonse rate, gap price, supply risk)
+      - Connect entities through defined relationships
+      
+      ### Wolbu Investment Philosophy Application
+      For each conclusion, trace back to the 4 core principles:
+      1. **저평가**: Price vs peak, income-adjusted value
+      2. **입지 독점성**: Transport + School + Jobs synergy
+      3. **공급 리스크**: Supply/Demand ratio assessment
+      4. **환금성**: Liquidity and demand sustainability
+      
+      ## Output Format (Markdown)
+      
+      # 🏠️ **{region_name}** 지역 분석 보고서
+      
+      ---
+      
+      ## 1. 지역 개요 및 입지 등급 (Grade Evaluation)
+      
+      | 항목 | 등급 | 근거 |
+      |------|------|------|
+      | **직장 (Jobs)** | [S/A/B/C] | [종사자 수, 주요 기업, 통근 거리] |
+      | **교통 (Transport)** | [S/A/B/C] | [노선명, 강남 소요시간, 환승 횟수] |
+      | **학군 (School)** | [S/A/B/C] | [학업성취도, 학원가 규모, 특목고 진학률] |
+      | **환경 (Environment)** | [S/A/B/C] | [백화점/마트, 병원, 공원] |
+      | **공급 (Supply)** | [안전/주의/위험] | [3년 물량 X세대 vs 적정수요 Y세대] |
+      
+      > ✅ **입지 독점성**: [종합 평가]
+      > ⚠️ **공급 리스크**: [경고 또는 안심 메시지]
+      
+      ---
+      
+      ## 2. 지역 분위기 및 임장 뉘앙스
+      
+      ### **현장 분위기**
+      [현장 관찰 요약 - 상권 활성도, 주민 특성 등]
+      
+      ### **부동산 사장님 코멘트**
+      [매수세/매도세, 급매 동향, 가격 전망 인용]
+      
+      > 🔍 **심리 분석**: [시장 심리 해석]
+      
+      ---
+      
+      ## 3. 주요 단지 분석 (Top Picks)
+      
+      *팩트 데이터에서 추출된 단지만 포함*
+      
+      ### **[단지명 1]**
+      - **투자금**: [매매가] - [전세가] = **[GAP]만원**
+      - **전세가율**: [X]%
+      - **특징**: [장점/단점/투자포인트]
+      
+      ### **[단지명 2]** (있는 경우)
+      ...
+      
+      > ✅ **투자금 비교**: [단지간 비교 인사이트]
+      
+      ---
+      
+      ## 4. 최종 투자 결론
+      
+      ### **지역 평가**
+      - [저평가 구간 / 적정 가치 / 고평가 주의] 판정 + 근거
+      
+      ### **투자 전략**
+      | 투자자 유형 | 추천 전략 | 이유 |
+      |--------------|------------|------|
+      | **실수요자** | [전략] | [이유] |
+      | **투자자** | [전략] | [이유] |
+      | **중장기 투자자** | [전략] | [이유] |
+      
+      ---
+      
+      ### **Action Plan**
+      1. [구체적 행동 지침 1]
+      2. [구체적 행동 지침 2]
+      3. [구체적 행동 지침 3]
+      
+      ---
+      
+      > ✅ **Wolbu 스타일 투자 철학에 부합**: [핵심 메시지]
+      
+      ---
+      
+      **Constraints**: 
+      - 추측 배제, 제공된 데이터와 시각적 증거에만 기반
+      - 수치는 정확히 인용, 불확실한 경우 "추정" 명시
+      - 모든 등급 판정에 근거 제시
+
+metadata:
+  author: "realEstateAnalyzer"
+  created_at: "2024-12-05"
+  updated_at: "2024-12-05"
+  ontology_version: "1.0"

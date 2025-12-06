@@ -1,0 +1,82 @@
+_type: chat
+name: visual_verification
+version: "2.0.0"
+description: "시각적 데이터 검증 및 차트/지도 분석"
+tags: ["prod", "core", "multimodal"]
+
+input_variables:
+  - report_text
+
+messages:
+  - role: system
+    content_ref: base_system.yaml
+    
+  - role: user
+    content: |
+      # Task: Visual Data Verification & Chart Analysis
+      
+      Analyze the provided images (charts, maps, tables) along with text to verify claims and extract visual data.
+      
+      ## Input Context
+      ```
+      {report_text}
+      ```
+      
+      ## Visual Analysis Tasks
+      
+      ### 1. Supply Chart Analysis (공급 물량 차트)
+      If supply volume charts are present:
+      - Read exact numbers for each year (2024, 2025, 2026, 2027)
+      - Identify the "Appropriate Demand" reference line if visible
+      - Calculate total 3-year supply
+      - Assess supply risk based on visual data
+      
+      ### 2. Price Trend Charts (시세 추이 그래프)
+      If price trend charts are present:
+      - Identify peak price and current price levels
+      - Calculate percentage drop from peak
+      - Note any inflection points or trend changes
+      
+      ### 3. Map Analysis (지도 분석)
+      If maps are present:
+      - Identify key landmarks (subway stations, schools, commercial areas)
+      - Estimate distances to job centers
+      - Note any development zones or infrastructure projects
+      
+      ### 4. Table Data Extraction (표 데이터)
+      If comparison tables are present:
+      - Extract all numerical values accurately
+      - Identify ranking or ordering patterns
+      - Cross-reference with text claims
+      
+      ## Verification Output
+      
+      Provide a structured verification report in JSON format:
+      
+      {{
+        "visual_sources": [
+          {{
+            "type": "supply_chart|price_chart|map|table",
+            "description": "string",
+            "extracted_data": {{}},
+            "confidence": "high|medium|low"
+          }}
+        ],
+        "text_claim_verification": [
+          {{
+            "claim": "string from text",
+            "visual_evidence": "string",
+            "status": "verified|unverified|contradicted|no_visual_evidence"
+          }}
+        ],
+        "additional_insights": "string - insights from visuals not mentioned in text",
+        "data_quality_notes": "string - any caveats about visual data quality"
+      }}
+      
+      **Note**: If no relevant images are provided, analyze based on text context and note the lack of visual evidence.
+      Return ONLY the JSON object without markdown code blocks.
+
+metadata:
+  author: "realEstateAnalyzer"
+  created_at: "2024-12-05"
+  updated_at: "2024-12-05"

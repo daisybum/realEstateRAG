@@ -1,0 +1,118 @@
+_type: chat
+name: fact_extraction
+version: "2.0.0"
+description: "온톨로지 기반 지역/단지 데이터 정밀 추출 (JSON 구조화 출력)"
+tags: ["prod", "core", "ontology", "extraction"]
+
+input_variables:
+  - report_text
+
+messages:
+  - role: system
+    content_ref: base_system.yaml
+    
+  - role: user
+    content: |
+      # Task: Ontology-Based Entity Extraction
+      
+      Analyze the provided report to extract structured data for the Real Estate Knowledge Graph.
+      
+      ## Input Report
+      ```
+      {report_text}
+      ```
+      
+      ## Extraction Requirements
+      
+      ### 0. Region Detection (FIRST STEP - CRITICAL)
+      Before analyzing any data, identify the region:
+      - Check title, map, addresses for city indicators
+      - Determine: **서울/경기/인천** vs **부산** vs **대구** vs **대전** vs **광주** vs **기타**
+      - Apply region-specific transport criteria from the grading rules
+      - ⚠️ DO NOT use "강남" for non-Seoul regions
+      
+      ### 1. District Entity (지역 분석)
+      Extract regional information following the ontology schema:
+      
+      - **region_name**: Full district name (e.g., "용인시 수지구", "부산진구")
+      - **parent_city**: Parent metropolitan city (e.g., "경기도", "부산광역시")
+      - **population**: Population count (integer, null if not mentioned)
+      - **appropriate_demand**: Calculate as population × 0.005
+      - **supply_volume_3yr**: Total supply for next 3 years (integer)
+      - **supply_risk_status**: Evaluate as "Over-supply" / "Appropriate" / "Shortage"
+      
+      ### 2. Location Grades (입지 등급)
+      Assign grades based on the schema rules with evidence:
+      
+      - **jobs_grade**: S/A/B/C + reasoning (종사자수 기준)
+      - **transport_grade**: S/A/B/C + key transport lines
+        - For 서울/수도권: Use 강남역 기준
+        - For 부산: Use 서면역 기준
+        - For 대구: Use 동성로 기준
+        - For 기타: Use 해당 지역 도심 기준
+      - **school_grade**: S/A/B/C + achievement percentage (if available)
+        - Include actual % number from the input
+      - **environment_grade**: S/A/B/C + commercial facilities
+      
+      ### 3. Complex Entities (단지 분석)
+      *Only extract if specific price/investment data exists. Skip simple mentions.*
+      
+      For each complex with detailed data:
+      - **name**: Complex name
+      - **sales_price**: Current sales price (만원)
+      - **jeonse_price**: Current jeonse price (만원)
+      - **gap_price**: Calculate (sales_price - jeonse_price)
+      - **jeonse_rate**: Calculate (jeonse_price / sales_price × 100)
+      - **is_undervalued**: Boolean based on criteria
+      
+      ### 4. Relationships
+      - **connected_transport**: List of transport lines connecting to job centers
+      - **comparable_complexes**: Any comparison relationships mentioned
+      
+      ## Required JSON Output Structure
+      
+      Respond with ONLY valid JSON matching this schema:
+      
+      {{
+        "district": {{
+          "entity_type": "District",
+          "name": "string",
+          "parent_city": "string",
+          "detected_region": "서울/경기/인천|부산|대구|대전|광주|기타",
+          "properties": {{
+            "population": "int or null",
+            "appropriate_demand": "int or null",
+            "supply_volume_3yr": "int or null",
+            "supply_risk_status": "Over-supply|Appropriate|Shortage|Unknown"
+          }},
+          "grades": {{
+            "jobs": {{"grade": "S|A|B|C", "evidence": "string", "worker_count": "int or null"}},
+            "transport": {{"grade": "S|A|B|C", "lines": ["string"], "regional_center": "string", "minutes_to_center": "int or null"}},
+            "school": {{"grade": "S|A|B|C", "achievement_percent": "float or null", "evidence": "string"}},
+            "environment": {{"grade": "S|A|B|C", "facilities": ["string"]}}
+          }}
+        }},
+        "complexes": [
+          {{
+            "entity_type": "ApartmentComplex",
+            "name": "string",
+            "properties": {{
+              "sales_price": "int",
+              "jeonse_price": "int",
+              "gap_price": "int",
+              "jeonse_rate": "float",
+              "is_undervalued": "boolean"
+            }},
+            "investment_comment": "string"
+          }}
+        ],
+        "reasoning_chain": "string explaining the analysis logic"
+      }}
+      
+      **Important**: Return ONLY the JSON object. No markdown code blocks, no additional text.
+
+metadata:
+  author: "realEstateAnalyzer"
+  created_at: "2024-12-05"
+  updated_at: "2024-12-05"
+  ontology_version: "1.0"

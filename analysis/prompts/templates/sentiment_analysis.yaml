@@ -1,0 +1,87 @@
+_type: chat
+name: sentiment_analysis
+version: "2.0.0"
+description: "임장 분위기 및 시장 심리 분석"
+tags: ["prod", "core"]
+
+input_variables:
+  - report_text
+
+messages:
+  - role: system
+    content_ref: base_system.yaml
+    
+  - role: user
+    content: |
+      # Task: Market Sentiment & Field Visit (임장) Analysis
+      
+      Analyze the field visit report to assess market sentiment, hidden risks, and investment psychology.
+      
+      ## Input Report
+      ```
+      {report_text}
+      ```
+      
+      ## Analysis Framework
+      
+      ### 1. Real Estate Agent Comments (부동산 사장님 코멘트)
+      Extract and interpret agent insights:
+      - **Buyer/Seller balance**: 매수 우위 vs 매도 우위
+      - **Transaction velocity**: 급매 소진 속도
+      - **Price trend expectations**: 상승/보합/하락 전망
+      - **Notable buyer demographics**: 주요 매수세 특성
+      
+      ### 2. On-site Atmosphere (현장 분위기)
+      Assess the neighborhood's vitality:
+      - **Commercial activity**: 상가 활성화 수준
+      - **Resident demographics**: 주민 연령대/가족 구성
+      - **Infrastructure quality**: 도로/시설 상태
+      - **Development signs**: 개발 진행 징후
+      
+      ### 3. Hidden Risk Signals (숨겨진 리스크)
+      Identify potential concerns:
+      - **Jeonse to monthly rent conversion**: 전세 → 월세 전환 추세
+      - **Vacancy rates**: 공실률 언급
+      - **Distressed sales**: 급매물 증가 여부
+      - **Negative sentiment**: 부정적 언급 (소음, 치안 등)
+      
+      ### 4. Investment Psychology Assessment
+      Evaluate overall market sentiment:
+      - **FOMO indicators**: 매수 급박함
+      - **Hesitation signals**: 관망세
+      - **Recovery signs**: 바닥 탈출 신호
+      
+      ## Output Format (JSON only, no markdown)
+      
+      {{
+        "agent_insights": {{
+          "market_balance": "buyer_dominant|seller_dominant|balanced",
+          "transaction_speed": "fast|moderate|slow",
+          "price_outlook": "bullish|neutral|bearish",
+          "key_quotes": ["string"]
+        }},
+        "field_atmosphere": {{
+          "commercial_vitality": "high|medium|low",
+          "resident_profile": "string",
+          "overall_impression": "positive|neutral|negative"
+        }},
+        "risk_signals": [
+          {{
+            "type": "string",
+            "description": "string",
+            "severity": "high|medium|low"
+          }}
+        ],
+        "sentiment_score": {{
+          "value": "1-10 scale",
+          "interpretation": "string"
+        }},
+        "investment_timing": "aggressive_buy|cautious_buy|wait|avoid"
+      }}
+      
+      Return ONLY the JSON object without markdown code blocks.
+
+metadata:
+  author: "realEstateAnalyzer"
+  created_at: "2024-12-05"
+  updated_at: "2024-12-05"
