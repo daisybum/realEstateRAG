@@ -28,7 +28,7 @@ services:
 
     volumes:
       # Model files (download separately)
-      - ${MODEL_DIR:-./models}:/models:ro
+      - ../../../realEstateRAG/models:/models:ro
 
       # Project workspace (for local image access)
       - ../../..:/workspace/app:ro
