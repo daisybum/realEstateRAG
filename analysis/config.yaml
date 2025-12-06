@@ -1,0 +1,43 @@
+system:
+  data_dir: "/workspace/data"
+  output_dir: "/workspace/app/realEstateAnalyzer/analysis_results"
+  api_url: "http://localhost:8000/v1"
+  model_name: "Qwen/Qwen3-VL-30B-A3B-Instruct"
+  api_key: "EMPTY"
+
+prompts:
+  templates_dir: "prompts/templates"
+  environment: "prod"
+  ontology_version: "1.0"
+
+# LangSmith 클라우드 연동 설정
+# 환경변수 우선: LANGSMITH_API_KEY, LANGSMITH_PROJECT
+langsmith:
+  enabled: true
+  project: "realEstateAnalyzer"
+  tracing: true
+  
+  # 프롬프트 Hub 설정
+  hub:
+    owner: "daisybum"
+    prompts:
+      - name: "re-base-system"
+        local_name: "base_system"
+        description: "Ontology-based real estate analyst system prompt"
+        tags: ["prod", "v2.0"]
+      - name: "re-fact-extraction"
+        local_name: "fact_extraction"
+        description: "Entity extraction with JSON schema"
+        tags: ["prod", "v2.0"]
+      - name: "re-visual-verification"
+        local_name: "visual_verification"
+        description: "Multimodal chart and map analysis"
+        tags: ["prod", "v2.0"]
+      - name: "re-sentiment-analysis"
+        local_name: "sentiment_analysis"
+        description: "Market sentiment and field visit analysis"
+        tags: ["prod", "v2.0"]
+      - name: "re-insight-generation"
+        local_name: "insight_generation"
+        description: "Final investment insight report"
+        tags: ["prod", "v2.0"]
