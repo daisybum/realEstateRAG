@@ -297,12 +297,14 @@ class GraphSchemaManager:
         ]
         for label, prop in constraints:
             try:
-                query = f"CREATE CONSTRAINT FOR (n:{label}) REQUIRE n.{prop} IS UNIQUE"
+                # Try standard Cypher syntax
+                query = f"CREATE CONSTRAINT ON (n:{label}) ASSERT n.{prop} IS UNIQUE"
                 self.graph.query(query)
                 logger.info(f"Created constraint: {label}.{prop} UNIQUE")
             except Exception as e:
-                if "already exists" not in str(e).lower():
-                    logger.warning(f"Failed to create constraint: {e}")
+                # FalkorDB might not support constraints fully yet, or syntax differs
+                # Just log and continue, as indexes should be enough for performance
+                logger.warning(f"Failed to create constraint {label}.{prop}: {e}")
     
     def initialize_schema(self):
         """스키마 초기화"""
@@ -352,7 +354,7 @@ CYPHER_TEMPLATES_V2 = {
     "merge_complex": """
         MERGE (c:ApartmentComplex {name: $name})
         SET c += $properties
-        RETURN r
+        RETURN c
     """,
     
     # InvestmentAnalysis 생성 + Complex 연결

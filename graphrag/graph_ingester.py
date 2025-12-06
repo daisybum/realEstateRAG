@@ -115,9 +115,9 @@ class GraphIngesterV2:
         
         # 6. InvestmentAnalysis 노드들 생성 + 추론 체인 연결 (NEW in v2.0)
         analyses = self._create_analyses(facts, region_name, grades)
-        stats["nodes_created"] += len(analyses)
-        stats["relationships_created"] += len(analyses)  # HAS_ANALYSIS
-        stats["analyses"] += len(analyses)
+        stats["nodes_created"] += analyses
+        stats["relationships_created"] += analyses  # HAS_ANALYSIS
+        stats["analyses"] += analyses
         
         # 추론 체인: Grade → Analysis (SUPPORTS)
         stats["relationships_created"] += analyses * len(grades)  # 근사치
@@ -127,9 +127,23 @@ class GraphIngesterV2:
         stats["nodes_created"] += len(supplies)
         stats["relationships_created"] += len(supplies)
         
-        logger.info(f"Ingested report {report_id}: {stats}")
         return stats
     
+    def _format_props(self, props: Dict[str, Any]) -> str:
+        """딕셔너리를 Cypher 속성 문자열로 변환"""
+        parts = []
+        for k, v in props.items():
+            if isinstance(v, str):
+                safe_v = v.replace("'", "\\'")  # 이스케이프
+                parts.append(f"{k}: '{safe_v}'")
+            elif isinstance(v, bool):
+                parts.append(f"{k}: {str(v).lower()}")
+            elif v is None:
+                continue
+            else:
+                parts.append(f"{k}: {v}")
+        return "{" + ", ".join(parts) + "}"
+
     def _parse_facts(self, facts: Any) -> Dict[str, Any]:
         """facts 데이터 파싱"""
         if isinstance(facts, dict):
@@ -169,10 +183,9 @@ class GraphIngesterV2:
         )
         
         try:
-            self.graph.query(
-                CYPHER_TEMPLATES_V2["create_report"],
-                {"properties": report.to_cypher_properties()}
-            )
+            props_str = self._format_props(report.to_cypher_properties())
+            query = f"CREATE (r:Report {props_str}) RETURN r"
+            self.graph.query(query)
             logger.debug(f"Created Report: {report_id}")
             return report_id
         except Exception as e:
@@ -206,10 +219,9 @@ class GraphIngesterV2:
         props = {"name": region_name}
         
         try:
-            self.graph.query(
-                CYPHER_TEMPLATES_V2["merge_region"],
-                {"name": region_name, "properties": props}
-            )
+            props_str = self._format_props(props)
+            query = f"MERGE (r:Region {{name: '{region_name}'}}) SET r += {props_str} RETURN r"
+            self.graph.query(query)
             logger.debug(f"Created/updated Region: {region_name}")
             return region_name
         except Exception as e:
@@ -275,13 +287,14 @@ class GraphIngesterV2:
         # Indicator 노드 생성 및 Region 연결
         for indicator in indicators_data:
             try:
-                self.graph.query(
-                    CYPHER_TEMPLATES_V2["create_indicator"],
-                    {
-                        "region_name": region_name,
-                        "properties": indicator.to_cypher_properties()
-                    }
-                )
+                props_str = self._format_props(indicator.to_cypher_properties())
+                query = f"""
+                MATCH (r:Region {{name: '{region_name}'}})
+                CREATE (i:Indicator {props_str})
+                CREATE (r)-[:HAS_INDICATOR]->(i)
+                RETURN i
+                """
+                self.graph.query(query)
                 created.append(f"{indicator.type}:{indicator.value}")
                 logger.debug(f"Created Indicator: {indicator.type}={indicator.value}")
             except Exception as e:
@@ -343,13 +356,14 @@ class GraphIngesterV2:
             
             try:
                 # GradeMetric 생성 쿼리 (Region 연결)
+                props_str = self._format_props(props)
                 query = f"""
                 MATCH (r:Region {{name: '{region_name}'}})
-                CREATE (g:GradeMetric $properties)
+                CREATE (g:GradeMetric {props_str})
                 CREATE (r)-[:HAS_GRADE]->(g)
                 RETURN g
                 """
-                self.graph.query(query, {"properties": props})
+                self.graph.query(query)
                 created.append(f"{category.value}:{grade.value}")
                 logger.debug(f"Created Grade: {category.value}={grade.value}")
             except Exception as e:
@@ -385,10 +399,9 @@ class GraphIngesterV2:
             
             try:
                 # Complex 노드 생성
-                self.graph.query(
-                    CYPHER_TEMPLATES_V2["merge_complex"],
-                    {"name": name, "properties": props}
-                )
+                props_str = self._format_props(props)
+                query = f"MERGE (c:ApartmentComplex {{name: '{name}'}}) SET c += {props_str}"
+                self.graph.query(query)
                 
                 # Region 연결
                 if region_name:
@@ -456,13 +469,14 @@ class GraphIngesterV2:
             
             try:
                 # InvestmentAnalysis 생성 + Complex 연결
-                self.graph.query(
-                    CYPHER_TEMPLATES_V2["create_analysis"],
-                    {
-                        "complex_name": name,
-                        "properties": analysis.to_cypher_properties()
-                    }
-                )
+                props_str = self._format_props(analysis.to_cypher_properties())
+                query = f"""
+                MATCH (c:ApartmentComplex {{name: '{name}'}})
+                CREATE (a:InvestmentAnalysis {props_str})
+                CREATE (c)-[:HAS_ANALYSIS]->(a)
+                RETURN a
+                """
+                self.graph.query(query)
                 
                 # 추론 체인: Grade → Analysis (SUPPORTS)
                 # 모든 S/A 등급을 Analysis에 연결
@@ -509,13 +523,14 @@ class GraphIngesterV2:
                 props = {"year": year, "volume": vol}
                 
                 try:
+                    props_str = self._format_props(props)
                     query = f"""
                     MATCH (r:Region {{name: '{region_name}'}})
-                    CREATE (s:SupplyEvent $properties)
+                    CREATE (s:SupplyEvent {props_str})
                     CREATE (r)-[:HAS_SUPPLY]->(s)
                     RETURN s
                     """
-                    self.graph.query(query, {"properties": props})
+                    self.graph.query(query)
                     created.append(f"{year}:{vol}")
                     logger.debug(f"Created Supply: {year}={vol}")
                 except Exception as e:
