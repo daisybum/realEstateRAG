@@ -1,0 +1,23 @@
+# Real Estate GraphRAG System - Dependencies
+
+# Core
+python-dotenv>=1.0.0
+pyyaml>=6.0
+tqdm>=4.65.0
+
+# LLM
+openai>=1.0.0
+langchain>=0.2.0
+langchain-core>=0.2.0
+
+# Graph Database
+falkordb>=1.0.0
+
+# Web UI
+streamlit>=1.30.0
+
+# Data Processing
+pandas>=2.0.0
+
+# Optional: LangSmith tracing
+# langsmith>=0.1.0
