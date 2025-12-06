@@ -1,85 +1,40 @@
 # Known Issues - Schema v2.0
 
-## 미해결 이슈
+## ✅ Resolved Issues
 
-### 1. FalkorDB Cypher 쿼리 호환성 문제 ⚠️
+### 1. FalkorDB Cypher Query Compatibility (2025-12-07)
+**Status:** **RESOLVED**
+- **Issue:** FalkorDB Python client does not support Map parameter binding (e.g., `$properties`).
+- **Resolution:** Refactored `graph_schema.py` and `ingester` to use Python string interpolation (`{key}`) instead of Cypher parameters.
+- **Verification:** Successfully ingested nested graph data (Reasoning Chain) via `batch_ingest.py`.
 
-**증상:**
-- `$properties` 파라미터 전달 시 "Encountered unhandled type" 에러
-- UNIQUE constraint 문법 오류 (`CREATE CONSTRAINT FOR` vs `CREATE CONSTRAINT ON`)
+### 2. LLM Server ARM64 Build (2025-12-07)
+**Status:** **RESOLVED**
+- **Issue:** Default `llama.cpp` Docker image incompatible with GB10 (Grace Hopper) ARM64.
+- **Resolution:** Created multi-stage Dockerfile compiling `llama.cpp` from source with `CUDA_DOCKER_ARCH=all` and `GGML_CUDA_FORCE_MMQ=1`.
+- **Verification:** Server running (`llama-qwen3-vl-30b`), validated via 200 OK responses on `/v1/chat/completions`.
 
-**영향:**
-- Report, Indicator, InvestmentAnalysis 노드 생성 실패
-- 데이터 적재 불가
-
-**임시 해결책:**
-- FalkorDB 버전 확인 필요 (현재: 사용 중인 버전 미확인)
-- Cypher 쿼리를 문자열 보간 방식으로 변경 고려
-
-**상세:**
-```python
-# 실패하는 쿼리
-self.graph.query(
-    "CREATE (r:Report $properties)",
-    {"properties": {...}}  # ❌ Unhandled type error
-)
-
-# 대안
-query = f"CREATE (r:Report {{report_id: '{id}', confidence: {score}}})"
-self.graph.query(query)  # ✅ 작동 가능
-```
+### 3. GraphRAG Package Recognition
+**Status:** **RESOLVED**
+- **Resolution:** Added `__init__.py` to `graphrag/` and ensured `PYTHONPATH` includes project root.
 
 ---
 
-### 2. LLM 서버 아키텍처 불일치 🐛
+## ⚠️ Current Issues & Limitations
 
-**증상:**
-- `exec /app/llama-server: exec format error`
-- Docker 이미지: linux/amd64
-- 호스트: linux/arm64 (GB10)
-
-**영향:**
-- llama.cpp 서버 실행 불가
-- 멀티모달 분석 (이미지 처리) 실패
-
-**해결 방법:**
-```bash
-# Dockerfile에서 ARM64 빌드 설정 필요
-FROM --platform=linux/arm64 ...
-
-# 또는 qemu를 사용한 에뮬레이션 (성능 저하)
-docker run --platform linux/amd64 ...
-```
-
----
-
-### 3. GraphRAG 패키지 인식 실패 ⚠️
-
-**증상:**
-```
-WARNING - GraphRAG not available (falkordb package not installed)
-```
-
-**원인:**
-- `main_analysis.py`에서 falkordb import 실패
-- 실제로는 설치되어 있으나 conda 환경 인식 문제
-
-**영향:**
-- `--enable-graph` 옵션 무시됨
-- 분석 후 그래프 자동 적재 안 됨
-
-**임시 해결책:**
-```bash
-# 수동 적재
-python test_v2_ingestion.py
-```
-
----
+### 1. Qwen3-VL Model Output Quality (Prompt Engineering)
+**Status:** **Active**
+- **Issue:** "Qwen3-VL-30B-A3B-Instruct-Q8_0" exhibits severe repetition (looping) on some prompts, generating 8k+ tokens of garbage text during `fact_extraction` or `insight_generation`.
+- **Observation:** `1000_analysis.json` contained truncated repetitive text ("he-he-he...").
+- **Next Steps:**
+    - Adjust `temperature` and `repetition_penalty` in `config.yaml`.
+    - Refine system prompts to be more explicit for VL models.
+    - Validate with `Q4_K_M` quantization if `Q8_0` is too unstable.
 
 ## 테스트 현황
 
 ### ✅ 완료된 테스트
-- [x] FalkorDB Docker 시작
+시작
 - [x] Schema v2.0 클래스 정의
 - [x] GraphIngesterV2 초기화
 - [x] 분석 파이프라인 실행 (텍스트 기반)
@@ -96,23 +51,6 @@ python test_v2_ingestion.py
 ---
 
 ## 다음 단계 (우선순위)
-
-### P0 - 필수
-1. **Cypher 쿼리 수정**
-   - FalkorDB 공식 문서 참조
-   - `$properties` 파라미터 방식 제거
-   - 문자열 보간으로 전환
-
-2. **LLM 서버 ARM64 빌드**
-   - Dockerfile 수정
-   - ARM64 이미지 재빌드
-   - `--media-path` 옵션 검증
-
-### P1 - 중요
-3. **통합 테스트**
-   - 전체 워크플로우 검증
-   - 추론 체인 조회 확인
-   - 성능 측정
 
 ### P2 - 개선
 4. **에러 핸들링 강화**
