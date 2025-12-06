@@ -15,7 +15,7 @@ import re
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass
 
-from .graph_schema import WolbuOntology, CYPHER_TEMPLATES
+from .graph_schema import WolbuOntologyV2, CYPHER_TEMPLATES_V2
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ class HybridRAGEngine:
         self.graph = graph
         self.llm = llm_client
         self.model_name = model_name or self._get_default_model()
-        self.ontology = WolbuOntology()
+        self.ontology = WolbuOntologyV2()
     
     def _get_default_model(self) -> str:
         """기본 모델명"""
