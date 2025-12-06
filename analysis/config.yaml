@@ -41,3 +41,14 @@ langsmith:
         local_name: "insight_generation"
         description: "Final investment insight report"
         tags: ["prod", "v2.0"]
+
+# FalkorDB 그래프 데이터베이스 설정
+falkordb:
+  url: "redis://localhost:6379"
+  graph_name: "real_estate"
+  auto_init_schema: true
+
+# GB10 최적화 설정
+gb10_optimization:
+  falkordb_memory: "16G"
+  llm_memory_reserve: "60G"
