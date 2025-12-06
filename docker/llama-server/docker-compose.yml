@@ -1,0 +1,51 @@
+# =================================================================================
+# Docker Compose for llama.cpp Server (GGUF Multimodal)
+# =================================================================================
+# Model: Qwen3-VL-30B-A3B-Instruct (q4_K_M quantization)
+# Features: OpenAI-compatible API, Multimodal (vision) support
+# =================================================================================
+
+services:
+  llama-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: llama-server:qwen3-vl-30b-q4km
+    container_name: llama-qwen3-vl-30b
+
+    # GPU Configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+    environment:
+      # CUDA Configuration
+      - CUDA_VISIBLE_DEVICES=0
+
+    volumes:
+      # Model files (download separately)
+      - ${MODEL_DIR:-./models}:/models:ro
+
+      # Project workspace (for local image access)
+      - ../../..:/workspace/app:ro
+
+      # Data directory (realEstateCrawler output)
+      - ../../../realEstateCrawler/output:/workspace/data:ro
+
+    ports:
+      - "8000:8000"
+
+    ipc: host
+
+    command: >
+      --model /models/${MODEL_FILENAME:-Qwen3-VL-30B-A3B-Instruct-UD-Q8_K_XL.gguf} --mmproj /models/${MMPROJ_FILENAME:-mmproj-Qwen3-VL-30B-A3B-Instruct-f16.gguf} --host 0.0.0.0 --port 8000 --ctx-size ${CTX_SIZE:-32768} --n-gpu-layers ${N_GPU_LAYERS:--1} --flash-attn --threads ${THREADS:-8}
+
+    restart: unless-stopped
+
+volumes:
+  models:
+    driver: local
