@@ -17,8 +17,6 @@ class ReportData:
     id: str
     text: str
     images: List[str]
-    pdf: Optional[str] = None
-    pptx: Optional[str] = None
     
     @property
     def is_empty(self) -> bool:
@@ -88,16 +86,10 @@ class DataLoader:
         # 이미지 로드 (정렬됨)
         images = self._load_images(report_dir)
         
-        # PDF/PPTX 경로 확인
-        pdf = self._find_file(report_dir, "*.pdf")
-        pptx = self._find_file(report_dir, "*.pptx")
-        
         return ReportData(
             id=report_id,
             text=text,
             images=images,
-            pdf=pdf,
-            pptx=pptx,
         )
     
     def _load_text(self, report_dir: Path, report_id: str) -> str:
@@ -120,10 +112,6 @@ class DataLoader:
         images = sorted(images, key=lambda x: x.name)
         return [str(img.absolute()) for img in images]
     
-    def _find_file(self, report_dir: Path, pattern: str) -> Optional[str]:
-        """특정 패턴의 파일 찾기"""
-        files = list(report_dir.glob(pattern))
-        return str(files[0].absolute()) if files else None
 
 
 if __name__ == "__main__":

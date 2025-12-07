@@ -89,12 +89,9 @@ class AnalysisPipeline:
         
         # 입력 품질 검증: 이미지 또는 문서가 없으면 스킵
         has_images = len(data.images) > 0
-        has_documents = data.pdf is not None or data.pptx is not None
-        
-        if not has_images and not has_documents:
+        if not has_images:
             logger.warning(
-                f"Skipping {data.id}: No media files "
-                f"(images: {len(data.images)}, pdf: {data.pdf is not None}, pptx: {data.pptx is not None})"
+                f"Skipping {data.id}: No images found"
             )
             return None
         
