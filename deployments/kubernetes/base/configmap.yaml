@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: realestaterag-config
+data:
+  environment: "development"
+  llm_api_url: "http://vllm-service:8000/v1"
+  falkordb_graph_name: "wolbu_v3"
+  log_level: "INFO"
+  enable_metrics: "true"

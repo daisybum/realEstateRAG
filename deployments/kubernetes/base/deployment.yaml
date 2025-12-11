@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realestaterag-api
+  labels:
+    app: realestaterag
+    component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: realestaterag
+      component: api
+  template:
+    metadata:
+      labels:
+        app: realestaterag
+        component: api
+    spec:
+      containers:
+      - name: api
+        image: realestaterag-api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: realestaterag-config
+              key: environment
+        - name: FALKORDB_HOST
+          value: "falkordb-service"
+        - name: FALKORDB_PORT
+          value: "6379"
+        - name: LLM_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: realestaterag-config
+              key: llm_api_url
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: realestaterag-api-service
+  labels:
+    app: realestaterag
+    component: api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: realestaterag
+    component: api
