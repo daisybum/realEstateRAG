@@ -145,25 +145,85 @@ class GraphIngesterV2:
         return "{" + ", ".join(parts) + "}"
 
     def _parse_facts(self, facts: Any) -> Dict[str, Any]:
-        """facts 데이터 파싱"""
+        """facts 데이터 파싱 (문자열 또는 딕셔너리 지원)"""
         if isinstance(facts, dict):
             return facts
         
         if isinstance(facts, str):
+            # 빈 문자열 처리
+            if not facts.strip():
+                return {}
+            
+            # 1. 직접 JSON 파싱 시도
             try:
-                json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', facts, re.DOTALL)
-                if json_match:
-                    return json.loads(json_match.group())
+                parsed = json.loads(facts)
+                if isinstance(parsed, dict):
+                    logger.debug("Successfully parsed facts as JSON string")
+                    return parsed
             except json.JSONDecodeError:
                 pass
             
+            # 2. JSON 코드 블록 제거 후 재시도
+            cleaned = facts.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            if cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+            
             try:
-                return json.loads(facts)
+                parsed = json.loads(cleaned)
+                if isinstance(parsed, dict):
+                    logger.debug("Successfully parsed facts after removing code blocks")
+                    return parsed
             except json.JSONDecodeError:
-                logger.error(f"Failed to parse facts string")
-                return {}
+                pass
+            
+            # 3. 첫 번째 { 부터 마지막 } 까지 추출
+            start_idx = cleaned.find('{')
+            end_idx = cleaned.rfind('}')
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                json_str = cleaned[start_idx:end_idx + 1]
+                try:
+                    parsed = json.loads(json_str)
+                    if isinstance(parsed, dict):
+                        logger.debug("Successfully parsed facts by extracting JSON substring")
+                        return parsed
+                except json.JSONDecodeError:
+                    pass
+            
+            # 4. 불완전한 JSON 수리 시도
+            try:
+                repaired = self._repair_json_string(cleaned if start_idx == -1 else json_str)
+                parsed = json.loads(repaired)
+                if isinstance(parsed, dict):
+                    logger.debug("Successfully parsed facts after JSON repair")
+                    return parsed
+            except (json.JSONDecodeError, Exception):
+                pass
+            
+            logger.error(f"Failed to parse facts string (length: {len(facts)})")
+            return {}
         
         return {}
+    
+    def _repair_json_string(self, json_str: str) -> str:
+        """불완전한 JSON 문자열 수리"""
+        # 열린 괄호 수 맞추기
+        open_braces = json_str.count('{') - json_str.count('}')
+        open_brackets = json_str.count('[') - json_str.count(']')
+        
+        if open_braces > 0:
+            json_str = json_str.rstrip() + '}' * open_braces
+        if open_brackets > 0:
+            json_str = json_str.rstrip() + ']' * open_brackets
+        
+        # 후행 쉼표 제거
+        json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+        
+        return json_str
     
     def _create_report_node(self, result: Dict) -> Optional[str]:
         """Report 노드 생성 (NEW in v2.0)"""
@@ -238,48 +298,34 @@ class GraphIngesterV2:
         indicators_data = []
         
         # district에서 지표 추출
-        if "district" in facts and isinstance(facts["district"], dict):
-            district = facts["district"]
-            
-            if "population" in district:
+        district = facts.get("district", {})
+        # district 바로 아래에 있거나, properties 아래에 있을 수 있음
+        props = district.get("properties", district)
+        
+        if props and isinstance(props, dict):
+            if "population" in props and props["population"] is not None:
                 indicators_data.append(
                     Indicator(
                         type=IndicatorType.POPULATION.value,
-                        value=district["population"],
+                        value=props["population"],
                         unit="명"
                     )
                 )
             
-            if "appropriate_demand" in district:
+            if "appropriate_demand" in props and props["appropriate_demand"] is not None:
                 indicators_data.append(
                     Indicator(
                         type=IndicatorType.APPROPRIATE_DEMAND.value,
-                        value=district["appropriate_demand"],
+                        value=props["appropriate_demand"],
                         unit="세대"
                     )
                 )
-        
-        # supply에서 지표 추출
-        if "supply" in facts and isinstance(facts["supply"], dict):
-            supply = facts["supply"]
             
-            # 3년간 공급물량
-            supply_3yr = 0
-            yearly = supply.get("yearly_volume", {}) or supply.get("by_year", {})
-            if isinstance(yearly, dict):
-                for year_str, volume in yearly.items():
-                    try:
-                        year = int(year_str)
-                        if 2024 <= year <= 2026:  # 최근 3년
-                            supply_3yr += int(volume) if volume else 0
-                    except (ValueError, TypeError):
-                        continue
-            
-            if supply_3yr > 0:
+            if "supply_volume_3yr" in props and props["supply_volume_3yr"] is not None:
                 indicators_data.append(
                     Indicator(
                         type=IndicatorType.SUPPLY_VOLUME_3YR.value,
-                        value=supply_3yr,
+                        value=props["supply_volume_3yr"],
                         unit="세대"
                     )
                 )
@@ -309,7 +355,11 @@ class GraphIngesterV2:
         if not region_name:
             return created
         
-        grades = facts.get("grades", {})
+        # grades는 top-level에 있거나 district 아래에 있을 수 있음
+        grades = facts.get("grades")
+        if not grades:
+            grades = facts.get("district", {}).get("grades", {})
+            
         if not isinstance(grades, dict):
             return created
         
