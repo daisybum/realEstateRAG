@@ -17,9 +17,9 @@ langsmith:
   project: "realEstateAnalyzer"
   tracing: true
   
-  # 프롬프트 Hub 설정
+  # Prompt Hub 설정
   hub:
-    owner: "daisybum"
+    owner: "df335145-b283-4738-bd7c-1c1fc02aca11"
     prompts:
       - name: "re-base-system"
         local_name: "base_system"
@@ -41,6 +41,10 @@ langsmith:
         local_name: "insight_generation"
         description: "Final investment insight report"
         tags: ["prod", "v2.0"]
+      - name: "re-db-construction"
+        local_name: "db_construction"
+        description: "Optimized prompt for fast DB construction"
+        tags: ["prod", "v2.0", "optimized"]
 
 # FalkorDB 그래프 데이터베이스 설정
 falkordb:

@@ -52,6 +52,10 @@ class PromptManager:
         """인사이트 생성 프롬프트"""
         return self._core.get_prompt("insight_generation")
     
+    def get_db_construction_prompt(self) -> ChatPromptTemplate:
+        """DB 구축용 간소화 프롬프트"""
+        return self._core.get_prompt("db_construction")
+    
     # ==================== 고급 기능 ====================
     
     @property

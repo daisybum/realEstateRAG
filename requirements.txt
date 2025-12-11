@@ -19,5 +19,5 @@ streamlit>=1.30.0
 # Data Processing
 pandas>=2.0.0
 
-# Optional: LangSmith tracing
-# langsmith>=0.1.0
+# LangSmith (prompt versioning and tracing)
+langsmith>=0.1.0
