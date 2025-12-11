@@ -26,9 +26,9 @@ class QwenAnalyzer:
     """
     
     DEFAULT_MODEL = "Qwen/Qwen3-VL-30B-A3B-Instruct"
-    DEFAULT_TEMPERATURE = 0.1
-    DEFAULT_MAX_TOKENS = 8192
-    MAX_IMAGES_PER_CHUNK = 8  # 더 작은 청크로 토큰 오버플로우 방지
+    DEFAULT_TEMPERATURE = 0.15
+    DEFAULT_MAX_TOKENS = 4096
+    MAX_IMAGES_PER_CHUNK = 5  # 더 작은 청크로 토큰 오버플로우 방지
     
     def __init__(self, 
                  api_key: str = "EMPTY", 
@@ -46,7 +46,7 @@ class QwenAnalyzer:
             max_tokens: 최대 출력 토큰
             max_images_per_chunk: 청크당 최대 이미지 개수
         """
-        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.client = OpenAI(api_key=api_key, base_url=base_url, max_retries=0)
         self.model_name = model_name or self._get_model_name()
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -101,6 +101,7 @@ class QwenAnalyzer:
                 messages=messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
+                frequency_penalty=0.1,  # Add mild penalty for repetition
             )
             return completion.choices[0].message.content
         except Exception as e:
