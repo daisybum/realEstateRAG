@@ -28,7 +28,7 @@ class SecretBackend(Enum):
 @dataclass
 class SecretConfig:
     """시크릿 설정"""
-    backend: SecretBackend = SecretBackend.ENV
+    backend: SecretBackend = SecretBackend.DOTENV  # Changed from ENV to auto-load .env files
     aws_region: str = "ap-northeast-2"
     aws_secret_name: str = "realEstateAnalyzer/secrets"
     gcp_project: str = ""
