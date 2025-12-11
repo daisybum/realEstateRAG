@@ -105,12 +105,13 @@ class QueryEngine:
         """쿼리 타입 분류"""
         q = question.lower()
         
-        if any(k in q for k in ["역", "접근", "분"]):
-            return "facility_access"
+        # 순서 중요: 더 구체적인 패턴을 먼저 체크
         if any(k in q for k in ["추이", "변화"]):
             return "price_trend"
         if any(k in q for k in ["저평가", "갭"]):
             return "undervalued"
+        if any(k in q for k in ["역", "접근", "분"]):
+            return "facility_access"
         
         return "general"
     
