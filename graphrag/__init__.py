@@ -33,10 +33,12 @@ from .graph_schema_v3 import (
 from .graph_ingester import GraphIngesterV2
 from .graph_ingester_v3 import GraphIngesterV3
 
-from .query_engine import HybridRAGEngine, QueryResult
+from .query_engine import HybridRAGEngine as HybridRAGEngineV2, QueryResult
+from .query_engine_v3 import HybridRAGEngineV3, QueryResultV3
 
 # Default to v3
 GraphIngester = GraphIngesterV3
+HybridRAGEngine = HybridRAGEngineV3
 
 __version__ = "3.0.0"
 
@@ -45,17 +47,20 @@ __all__ = [
     "WolbuOntologyV2",
     "GraphSchemaManager",
     "GraphIngesterV2",
+    "HybridRAGEngineV2",
+    "QueryResult",
     # v3.0
     "WolbuOntologyV3",
     "GraphSchemaManagerV3",
     "GraphIngesterV3",
+    "HybridRAGEngineV3",
+    "QueryResultV3",
     "Neighborhood",
     "Infra",
     "MarketSnapshot",
-    # Common
-    "GraphIngester", # Default to v3
+    # Common (default to v3)
+    "GraphIngester",
     "HybridRAGEngine",
-    "QueryResult",
     "Region",
     "ApartmentComplex",
     "Report",
