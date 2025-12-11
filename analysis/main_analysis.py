@@ -8,6 +8,7 @@ import os
 import json
 import logging
 import argparse
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -259,8 +260,6 @@ class AnalysisPipeline:
     
     def _extract_summary_from_chunks(self, text: str, max_chars: int) -> str:
         """청크 연결 텍스트에서 핵심 데이터 요약 추출"""
-        import re
-        
         # 각 청크에서 JSON 추출
         chunk_pattern = r"=== Chunk \d+ \(\d+ images\) ===\s*([\s\S]*?)(?==== Chunk|\Z)"
         matches = re.findall(chunk_pattern, text)
@@ -341,8 +340,6 @@ class AnalysisPipeline:
     
     def _extract_region_name(self, facts_json: str) -> str:
         """팩트 JSON에서 지역명 추출 (청크 텍스트 포맷 지원)"""
-        import re
-        
         # 청크 연결 텍스트인 경우 첫 번째 청크에서 추출
         if "=== Chunk" in facts_json:
             # 첫 번째 JSON 블록에서 지역명 추출
@@ -399,8 +396,6 @@ class AnalysisPipeline:
         Returns:
             반복이 제거된 텍스트
         """
-        import re
-        
         if len(text) < min_pattern_len * 3:
             return text
         

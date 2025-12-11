@@ -7,6 +7,7 @@ DB 구축에 최적화된 경량 파이프라인
 - 직접 그래프 DB 스트리밍 적재
 """
 import os
+import json
 import logging
 import argparse
 from pathlib import Path
@@ -142,8 +143,6 @@ class FastDBPipeline:
     
     def _save_intermediate(self, report_id: str, result: dict) -> None:
         """중간 결과 저장 (디버깅용)"""
-        import json
-        
         output_file = self.output_dir / f"{report_id}_db_data.json"
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
