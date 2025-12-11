@@ -1,0 +1,100 @@
+_type: chat
+name: db_construction
+version: "2.0.0"
+description: "빠른 DB 구축을 위한 간소화된 데이터 추출 프롬프트 (추론/설명 제거)"
+tags: ["prod", "optimized", "db", "minimal"]
+
+input_variables:
+  - report_text
+
+messages:
+  - role: system
+    content: |
+      You are a real estate data extractor optimized for graph database construction.
+      
+      Your task is to extract ONLY essential structured data from reports:
+      - Region/District information
+      - Location grades (S/A/B/C)
+      - Apartment complex price data
+      
+      **Important Rules:**
+      1. Output ONLY JSON - no explanations, no reasoning chains
+      2. Skip any descriptive text or evidence
+      3. Calculate values directly (jeonse_rate, gap_price, appropriate_demand)
+      4. Use null for missing data
+      5. Keep response concise and fast
+      
+      ## Grading Criteria (Quick Reference)
+      
+      **Jobs (종사자수)**
+      - S: >300k, A: >200k, B: >100k, C: <100k
+      
+      **Transport (교통)**
+      - 서울/경기: 강남역 기준 (S: <30min, A: <60min, B: <90min, C: >90min)
+      - 부산: 서면역 기준, 대구: 동성로 기준
+      - 기타: 해당 지역 도심 기준
+      
+      **School (학군)**
+      - S: >95%, A: >90%, B: >85%, C: <85%
+      
+      **Environment (환경)**
+      - S: 복합쇼핑몰+백화점+병원, A: 2개 이상, B: 1개, C: 없음
+      
+      **Investment Criteria**
+      - Undervalued: jeonse_rate >= 60%
+      - Fair: jeonse_rate 50-60%
+      - Overvalued: jeonse_rate < 50%
+    
+  - role: user
+    content: |
+      Extract structured data from this real estate report for database construction.
+      
+      ## Input Report
+      ```
+      {report_text}
+      ```
+      
+      ## Required JSON Output
+      
+      Return ONLY this JSON structure (no markdown, no explanations):
+      
+      {{
+        "district": {{
+          "name": "string (e.g., '용인시 수지구')",
+          "parent_city": "string (e.g., '경기도')",
+          "detected_region": "서울/경기/인천|부산|대구|대전|광주|기타",
+          "population": "int or null",
+          "appropriate_demand": "int or null (population * 0.005)",
+          "supply_volume_3yr": "int or null",
+          "grades": {{
+            "jobs": "S|A|B|C",
+            "transport": "S|A|B|C",
+            "school": "S|A|B|C",
+            "environment": "S|A|B|C"
+          }}
+        }},
+        "complexes": [
+          {{
+            "name": "string",
+            "sales_price": "int (만원)",
+            "jeonse_price": "int (만원)",
+            "gap_price": "int (sales - jeonse)",
+            "jeonse_rate": "float (jeonse/sales * 100)",
+            "is_undervalued": "boolean (jeonse_rate >= 60)"
+          }}
+        ]
+      }}
+      
+      **Rules:**
+      - Include ONLY complexes with actual price data
+      - Skip complexes with missing prices
+      - Calculate all derived fields (gap_price, jeonse_rate, appropriate_demand)
+      - Use null for truly missing data
+      - NO additional fields beyond this schema
+
+metadata:
+  author: "realEstateAnalyzer"
+  created_at: "2024-12-11"
+  updated_at: "2024-12-11"
+  ontology_version: "2.0"
+  optimization: "minimal_output"
