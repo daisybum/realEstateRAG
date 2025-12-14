@@ -1,0 +1,100 @@
+# Kong API Gateway Configuration
+# Declarative configuration for routing
+
+_format_version: "3.0"
+
+services:
+  # Ingestion Service
+  - name: ingestion-service
+    url: http://ingestion-service:8000
+    routes:
+      - name: ingestion-routes
+        paths:
+          - /api/v1/ingestion
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+
+  # Query Service
+  - name: query-service
+    url: http://query-service:8000
+    routes:
+      - name: query-routes
+        paths:
+          - /api/v1/query
+        strip_path: false
+        methods:
+          - GET
+          - POST
+
+  # LLM Proxy Service
+  - name: llm-proxy-service
+    url: http://llm-proxy:8000
+    routes:
+      - name: llm-routes
+        paths:
+          - /api/v1/llm
+        strip_path: false
+        methods:
+          - POST
+
+  # Storage Service
+  - name: storage-service
+    url: http://storage-service:8000
+    routes:
+      - name: storage-routes
+        paths:
+          - /api/v1/storage
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - DELETE
+
+  # Health Check Aggregator
+  - name: health-check
+    url: http://ingestion-service:8000
+    routes:
+      - name: health-routes
+        paths:
+          - /health
+        strip_path: false
+        methods:
+          - GET
+
+plugins:
+  # Rate Limiting
+  - name: rate-limiting
+    config:
+      minute: 100
+      policy: local
+
+  # CORS
+  - name: cors
+    config:
+      origins:
+        - "*"
+      methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      headers:
+        - Accept
+        - Authorization
+        - Content-Type
+        - X-Request-ID
+      exposed_headers:
+        - X-Request-ID
+      credentials: true
+      max_age: 3600
+
+  # Request/Response Logging
+  - name: file-log
+    config:
+      path: /dev/stdout
+      reopen: true

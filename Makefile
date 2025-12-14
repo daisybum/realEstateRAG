@@ -1,4 +1,4 @@
-.PHONY: help install dev test test-unit test-integration lint format build docker-build docker-up docker-down clean security ingest migrate
+.PHONY: help install dev test test-unit test-integration lint format build docker-build docker-up docker-down clean security ingest migrate proto services-up services-down
 
 # Default target
 help:
@@ -20,11 +20,18 @@ help:
 	@echo "  ingest      Run batch ingestion"
 	@echo "  migrate     Run data migration"
 	@echo ""
-	@echo "Docker:"
+	@echo "Docker (Monolith):"
 	@echo "  docker-build  Build Docker images"
 	@echo "  docker-up     Start all services"
 	@echo "  docker-down   Stop all services"
 	@echo "  docker-logs   View service logs"
+	@echo ""
+	@echo "Microservices:"
+	@echo "  proto           Generate gRPC code from proto files"
+	@echo "  services-build  Build all microservice images"
+	@echo "  services-up     Start microservices stack"
+	@echo "  services-down   Stop microservices stack"
+	@echo "  services-logs   View microservices logs"
 	@echo ""
 	@echo "Security:"
 	@echo "  security    Run security scan (bandit)"
@@ -69,7 +76,7 @@ ingest:
 migrate:
 	. .venv/bin/activate && python scripts/migrate_v2_to_v3.py
 
-# Docker
+# Docker (Monolith)
 docker-build:
 	docker-compose -f deployments/docker/docker-compose.yml build
 
@@ -81,6 +88,36 @@ docker-down:
 
 docker-logs:
 	docker-compose -f deployments/docker/docker-compose.yml logs -f
+
+# Microservices
+proto:
+	@echo "Generating gRPC code..."
+	python -m grpc_tools.protoc \
+		-I./shared/proto \
+		--python_out=./shared/proto \
+		--grpc_python_out=./shared/proto \
+		./shared/proto/graph_service.proto
+
+services-build:
+	docker-compose -f deployments/docker/docker-compose.microservices.yml build
+
+services-up:
+	@echo "Starting infrastructure services..."
+	docker-compose -f deployments/docker/docker-compose.microservices.yml up -d
+	@echo ""
+	@echo "Infrastructure running:"
+	@echo "  - RabbitMQ: http://localhost:15672 (admin/admin123)"
+	@echo "  - PostgreSQL: localhost:5432"
+	@echo "  - FalkorDB: localhost:6380"
+	@echo "  - Redis: localhost:6379"
+	@echo ""
+	@echo "To start all services: docker-compose -f deployments/docker/docker-compose.microservices.yml --profile services up -d"
+
+services-down:
+	docker-compose -f deployments/docker/docker-compose.microservices.yml down
+
+services-logs:
+	docker-compose -f deployments/docker/docker-compose.microservices.yml logs -f
 
 # Security
 security:

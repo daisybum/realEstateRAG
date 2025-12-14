@@ -1,0 +1,266 @@
+version: '3.8'
+
+services:
+  # ============================================================
+  # Infrastructure
+  # ============================================================
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservices
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - microservices
+
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: falkordb
+    ports:
+      - "6380:6379"
+    volumes:
+      - falkordb-data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-p", "6379", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - microservices
+
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: realestaterag
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U admin" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservices
+
+  # ============================================================
+  # Microservices
+  # ============================================================
+
+  ingestion-service:
+    build:
+      context: ../../services/ingestion-service
+      dockerfile: Dockerfile
+    container_name: ingestion-service
+    ports:
+      - "8001:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://admin:admin123@postgres:5432/realestaterag
+      - RABBITMQ_URL=amqp://admin:admin123@rabbitmq:5672/
+      - LLM_PROXY_URL=http://llm-proxy:8000
+      - STORAGE_SERVICE_URL=http://storage-service:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - microservices
+    profiles:
+      - services
+
+  query-service:
+    build:
+      context: ../../services/query-service
+      dockerfile: Dockerfile
+    container_name: query-service
+    ports:
+      - "8002:8000"
+    environment:
+      - ENVIRONMENT=development
+      - REDIS_URL=redis://redis:6379
+      - GRAPH_SERVICE_URL=graph-service:50051
+      - LLM_PROXY_URL=http://llm-proxy:8000
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - microservices
+    profiles:
+      - services
+
+  graph-service:
+    build:
+      context: ../../services/graph-service
+      dockerfile: Dockerfile
+    container_name: graph-service
+    ports:
+      - "50051:50051"
+    environment:
+      - ENVIRONMENT=development
+      - FALKORDB_URL=redis://falkordb:6379
+      - RABBITMQ_URL=amqp://admin:admin123@rabbitmq:5672/
+    depends_on:
+      falkordb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - microservices
+    profiles:
+      - services
+
+  llm-proxy:
+    build:
+      context: ../../services/llm-proxy
+      dockerfile: Dockerfile
+    container_name: llm-proxy
+    ports:
+      - "8003:8000"
+    environment:
+      - ENVIRONMENT=development
+      - REDIS_URL=redis://redis:6379
+      - VLLM_URL=http://vllm:8000/v1
+      - LLM_MODEL=Qwen/Qwen3-VL-30B-A3B-Instruct
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - microservices
+    profiles:
+      - services
+
+  storage-service:
+    build:
+      context: ../../services/storage-service
+      dockerfile: Dockerfile
+    container_name: storage-service
+    ports:
+      - "8004:8000"
+    environment:
+      - ENVIRONMENT=development
+      - STORAGE_BACKEND=local
+      - DATA_DIR=/data
+    volumes:
+      - storage-data:/data
+    networks:
+      - microservices
+    profiles:
+      - services
+
+  # ============================================================
+  # API Gateway
+  # ============================================================
+
+  kong:
+    image: kong:latest
+    container_name: kong
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+      - "8001:8001"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+    volumes:
+      - ./kong.yml:/kong/kong.yml:ro
+    networks:
+      - microservices
+    profiles:
+      - gateway
+
+  # ============================================================
+  # Monitoring
+  # ============================================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - microservices
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - microservices
+    profiles:
+      - monitoring
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+    networks:
+      - microservices
+    profiles:
+      - monitoring
+
+volumes:
+  falkordb-data:
+  postgres-data:
+  storage-data:
+  prometheus-data:
+  grafana-data:
+
+
+networks:
+  microservices:
+    driver: bridge
