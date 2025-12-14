@@ -11,6 +11,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from realestaterag.config import settings
 from realestaterag.api.v1.routes import health, query, ingestion
 
+try:
+    from realestaterag.api.v1.routes import neo4j_query
+    NEO4J_AVAILABLE = True
+except ImportError:
+    NEO4J_AVAILABLE = False
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -51,6 +57,10 @@ if settings.enable_metrics:
 app.include_router(health.router, prefix="/health", tags=["Health"])
 app.include_router(query.router, prefix="/api/v1/query", tags=["Query"])
 app.include_router(ingestion.router, prefix="/api/v1/ingestion", tags=["Ingestion"])
+
+# Neo4j Routes (if available)
+if NEO4J_AVAILABLE:
+    app.include_router(neo4j_query.router, prefix="/api/v1/neo4j", tags=["Neo4j"])
 
 
 @app.get("/")
