@@ -32,8 +32,15 @@ dependencies = [
     # LLM & AI
     "openai>=1.0.0",
     
-    # Database
+    # Graph Databases
     "falkordb>=1.0.0",
+    "neo4j>=5.25.0",
+    
+    # Vector Search & Embeddings
+    "sentence-transformers>=3.0.0",
+    "langchain-neo4j>=0.1.0",
+    "langchain>=0.1.0",
+    "langchain-openai>=0.1.0",
     "redis>=5.0.0",
     
     # Web Framework
