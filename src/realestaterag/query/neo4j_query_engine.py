@@ -5,6 +5,7 @@ Implements semantic search and graph traversal using Neo4j with vector embedding
 """
 
 from typing import List, Dict, Any, Optional
+import os
 from neo4j import GraphDatabase
 from sentence_transformers import SentenceTransformer
 from loguru import logger
@@ -15,10 +16,15 @@ class Neo4jQueryEngine:
     
     def __init__(
         self,
-        uri: str = "bolt://localhost:7687",
-        auth: tuple = ("neo4j", "realestaterag123"),
+        uri: str = None,
+        auth: tuple = None,
         model_name: str = "jhgan/ko-sbert-nli"
     ):
+        uri = uri or os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        auth = auth or (
+            os.getenv("NEO4J_USER", "neo4j"),
+            os.getenv("NEO4J_PASSWORD", "")
+        )
         self.driver = GraphDatabase.driver(uri, auth=auth)
         self.encoder = SentenceTransformer(model_name)
         logger.info(f"Neo4jQueryEngine initialized with {uri}")

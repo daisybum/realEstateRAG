@@ -5,6 +5,7 @@ Defines and manages Neo4j node schema with vector properties for semantic search
 """
 
 from typing import Dict, List, Optional
+import os
 from neo4j import GraphDatabase, Driver
 from loguru import logger
 
@@ -198,8 +199,11 @@ class Neo4jSchemaManager:
 if __name__ == "__main__":
     # Test schema creation
     schema_manager = Neo4jSchemaManager(
-        uri="bolt://localhost:7687",
-        auth=("neo4j", "realestaterag123")
+        uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
+        auth=(
+            os.getenv("NEO4J_USER", "neo4j"),
+            os.getenv("NEO4J_PASSWORD", "")
+        )
     )
     
     try:

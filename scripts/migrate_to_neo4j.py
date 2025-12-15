@@ -5,6 +5,7 @@ Migrates knowledge graph data from FalkorDB to Neo4j with vector embeddings.
 """
 
 import asyncio
+import os
 from typing import List, Dict, Any
 from datetime import datetime
 from loguru import logger
@@ -29,10 +30,15 @@ class DataMigrator:
         self,
         falkor_host: str = "localhost",
         falkor_port: int = 6379,
-        neo4j_uri: str = "bolt://localhost:7687",
-        neo4j_auth: tuple = ("neo4j", "realestaterag123"),
+        neo4j_uri: str = None,
+        neo4j_auth: tuple = None,
         model_name: str = "jhgan/ko-sbert-nli"
     ):
+        neo4j_uri = neo4j_uri or os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        neo4j_auth = neo4j_auth or (
+            os.getenv("NEO4J_USER", "neo4j"),
+            os.getenv("NEO4J_PASSWORD", "")
+        )
         # FalkorDB connection
         if FALKORDB_AVAILABLE:
             self.falkor_client = FalkorDB(host=falkor_host, port=falkor_port)
